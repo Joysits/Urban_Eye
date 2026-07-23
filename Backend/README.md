@@ -5,7 +5,8 @@ Django backend for the Smart Urban and Crime Intelligence System.
 ## Stack
 - Django
 - Django REST Framework
-- PostgreSQL + PostGIS
+- SQLite (default local database)
+- PostgreSQL + PostGIS (optional for spatial/GIS features)
 
 ## Local setup
 1. Create and activate a Python virtual environment.

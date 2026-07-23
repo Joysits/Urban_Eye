@@ -1,0 +1,21 @@
+
+
+CREATE DATABASE urban_crime_intel;
+
+
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis_topology;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;
+
+
+CREATE USER urban_user WITH PASSWORD 'change-this-password';
+
+
+GRANT ALL PRIVILEGES ON DATABASE urban_crime_intel TO urban_user;
+GRANT ALL ON SCHEMA public TO urban_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO urban_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO urban_user;
+
+SELECT PostGIS_Version();
