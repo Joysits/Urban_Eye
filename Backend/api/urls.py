@@ -1,19 +1,29 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    DashboardAnalysisView,
-    DashboardOverviewView,
-    DashboardPlanningView,
-    DashboardReportView,
     LoginView,
     LogoutView,
     PasswordResetView,
-    PredictCrimeView,
-    PredictImpactView,
-    PredictPopulationView,
     RegisterView,
     UserProfileView,
+    ZoneViewSet,
+    IncidentViewSet,
+    PopulationDataViewSet,
+    InfrastructureViewSet,
+    PlanningProjectViewSet,
+    ImpactPredictionViewSet,
+    GeneratedReportViewSet,
     health_check,
 )
+
+router = DefaultRouter()
+router.register(r'zones', ZoneViewSet, basename='zone')
+router.register(r'incidents', IncidentViewSet, basename='incident')
+router.register(r'population', PopulationDataViewSet, basename='population')
+router.register(r'infrastructure', InfrastructureViewSet, basename='infrastructure')
+router.register(r'projects', PlanningProjectViewSet, basename='project')
+router.register(r'impact-predictions', ImpactPredictionViewSet, basename='impact-prediction')
+router.register(r'reports', GeneratedReportViewSet, basename='report')
 
 urlpatterns = [
     # Utility
@@ -26,14 +36,6 @@ urlpatterns = [
     path("auth/profile/",        UserProfileView.as_view(),    name="auth_profile"),
     path("auth/password-reset/", PasswordResetView.as_view(),  name="auth_password_reset"),
 
-    # Dashboard
-    path("dashboard/overview/",  DashboardOverviewView.as_view(),  name="dashboard_overview"),
-    path("dashboard/analysis/",  DashboardAnalysisView.as_view(),  name="dashboard_analysis"),
-    path("dashboard/planning/",  DashboardPlanningView.as_view(),  name="dashboard_planning"),
-    path("dashboard/reports/",   DashboardReportView.as_view(),    name="dashboard_reports"),
-
-    # AI Predictions
-    path("predict/population/",  PredictPopulationView.as_view(), name="predict_population"),
-    path("predict/crime/",       PredictCrimeView.as_view(),      name="predict_crime"),
-    path("predict/impact/",      PredictImpactView.as_view(),     name="predict_impact"),
+    # Spatial API endpoints
+    path("", include(router.urls)),
 ]

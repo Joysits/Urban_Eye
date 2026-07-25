@@ -6,6 +6,52 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# -----------------------------------------------------------------------------
+# GISInternals / OSGeo4W GDAL & GEOS Configuration (Required for Windows & GeoDjango)
+# -----------------------------------------------------------------------------
+if os.name == 'nt':
+    # 1. Try GISInternals first (default install directory)
+    GISINTERNALS_DIR = r'C:\Program Files\GDAL'
+
+    if os.path.exists(GISINTERNALS_DIR):
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(GISINTERNALS_DIR)
+
+        os.environ['PATH'] = GISINTERNALS_DIR + ';' + os.environ.get('PATH', '')
+        os.environ['GDAL_DATA'] = os.path.join(GISINTERNALS_DIR, 'gdal-data')
+        os.environ['PROJ_LIB'] = os.path.join(GISINTERNALS_DIR, 'projlib')
+
+        # Dynamically locate the gdal*.dll file in C:\Program Files\GDAL
+        for file in os.listdir(GISINTERNALS_DIR):
+            if file.startswith('gdal') and file.endswith('.dll'):
+                GDAL_LIBRARY_PATH = os.path.join(GISINTERNALS_DIR, file)
+                break
+
+        geos_dll = os.path.join(GISINTERNALS_DIR, 'geos_c.dll')
+        if os.path.exists(geos_dll):
+            GEOS_LIBRARY_PATH = geos_dll
+
+    # 2. Fallback to OSGeo4W if GISInternals is not installed
+    elif os.path.exists(r'C:\OSGeo4W\bin'):
+        OSGEO4W_ROOT = r'C:\OSGeo4W'
+        gdal_bin = os.path.join(OSGEO4W_ROOT, 'bin')
+
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(gdal_bin)
+
+        os.environ['PATH'] = gdal_bin + ';' + os.environ.get('PATH', '')
+        os.environ['GDAL_DATA'] = os.path.join(OSGEO4W_ROOT, 'share', 'gdal')
+        os.environ['PROJ_LIB'] = os.path.join(OSGEO4W_ROOT, 'share', 'proj')
+
+        for file in os.listdir(gdal_bin):
+            if file.startswith('gdal') and file.endswith('.dll'):
+                GDAL_LIBRARY_PATH = os.path.join(gdal_bin, file)
+                break
+
+        geos_dll = os.path.join(gdal_bin, 'geos_c.dll')
+        if os.path.exists(geos_dll):
+            GEOS_LIBRARY_PATH = geos_dll
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
 ALLOWED_HOSTS = [
@@ -14,7 +60,7 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
-DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite").lower()
+DATABASE_TYPE = os.getenv("DATABASE_TYPE", "postgis").lower()
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -23,15 +69,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",  # Enabled GeoDjango for PostGIS spatial features
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
     "api",
 ]
-
-# Only load django.contrib.gis if running on PostGIS (to avoid local GDAL errors)
-if DATABASE_TYPE == "postgis":
-    INSTALLED_APPS.insert(6, "django.contrib.gis")
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -64,13 +107,16 @@ TEMPLATES = [
 WSGI_APPLICATION = "urban_crime_intel.wsgi.application"
 ASGI_APPLICATION = "urban_crime_intel.asgi.application"
 
+# -----------------------------------------------------------------------------
+# Database Configuration
+# -----------------------------------------------------------------------------
 if DATABASE_TYPE == "postgis":
     DATABASES = {
         "default": {
             "ENGINE": "django.contrib.gis.db.backends.postgis",
             "NAME": os.getenv("POSTGRES_DB", "urban_crime_intel"),
-            "USER": os.getenv("POSTGRES_USER", "postgres"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres"),
+            "USER": os.getenv("POSTGRES_USER", "urban_user"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-this-password"),
             "HOST": os.getenv("POSTGRES_HOST", "localhost"),
             "PORT": os.getenv("POSTGRES_PORT", "5432"),
         }

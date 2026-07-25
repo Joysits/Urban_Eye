@@ -1,5 +1,6 @@
-from django.db import models
+from django.contrib.gis.db import models 
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 class UserProfile(models.Model):
     CITY_CHOICES = [
@@ -21,6 +22,15 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s profile - {self.focus_city} ({self.agency_role})"
+
+
+class Zone(models.Model):
+    name = models.CharField(max_length=120)
+    city = models.CharField(max_length=50, choices=UserProfile.CITY_CHOICES, default="Nairobi")
+    boundary = models.PolygonField(srid=4326, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.city} - {self.name}"
 
 
 class Incident(models.Model):
@@ -46,14 +56,14 @@ class Incident(models.Model):
     ]
 
     city = models.CharField(max_length=50, choices=UserProfile.CITY_CHOICES, default="Nairobi")
-    zone = models.CharField(max_length=120)
+    zone = models.ForeignKey(Zone, on_delete=models.SET_NULL, null=True, blank=True, related_name="incidents")
     category = models.CharField(max_length=40, choices=CATEGORY_CHOICES, default="Other")
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default="Moderate")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Open")
-    latitude = models.FloatField()
-    longitude = models.FloatField()
+    
+    location = models.PointField(srid=4326, null=True, blank=True)
     description = models.TextField(blank=True)
-    reported_at = models.DateTimeField(auto_now_add=True)
+    reported_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-reported_at"]
@@ -62,26 +72,67 @@ class Incident(models.Model):
         return f"{self.city} - {self.category} ({self.severity})"
 
 
-class PlanningProject(models.Model):
-    STAGE_CHOICES = [
-        ("Discovery", "Discovery"),
-        ("Consultation", "Consultation"),
-        ("Budgeting", "Budgeting"),
-        ("Execution", "Execution"),
+class PopulationData(models.Model):
+    zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name="population_records")
+    year = models.IntegerField()
+    population = models.IntegerField()
+    density = models.FloatField(help_text="People per square km", null=True, blank=True)
+    growth_rate = models.FloatField(help_text="Percentage growth since last record", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-year"]
+        unique_together = ('zone', 'year')
+
+    def __str__(self):
+        return f"{self.zone.name} - {self.year} ({self.population})"
+
+
+class Infrastructure(models.Model):
+    TYPE_CHOICES = [
+        ("Road", "Road"),
+        ("Hospital", "Hospital"),
+        ("School", "School"),
+        ("Power", "Power"),
+        ("Water", "Water"),
+        ("Other", "Other"),
     ]
 
-    PRIORITY_CHOICES = [
-        ("Low", "Low"),
-        ("Medium", "Medium"),
-        ("High", "High"),
+    name = models.CharField(max_length=150)
+    infra_type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    city = models.CharField(max_length=50, choices=UserProfile.CITY_CHOICES, default="Nairobi")
+    status = models.CharField(max_length=50, default="Operational")
+    
+    geometry = models.GeometryField(srid=4326, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.infra_type})"
+
+
+class PlanningProject(models.Model):
+    STAGE_CHOICES = [
+        ("Draft", "Draft"),
+        ("Review", "Under Review"),
+        ("Approved", "Approved"),
+        ("Rejected", "Rejected"),
+    ]
+
+    PROJECT_TYPE_CHOICES = [
+        ("Road", "Road"),
+        ("Hospital", "Hospital"),
+        ("School", "School"),
+        ("Mall", "Mall"),
+        ("Residential", "Residential"),
     ]
 
     city = models.CharField(max_length=50, choices=UserProfile.CITY_CHOICES, default="Nairobi")
     title = models.CharField(max_length=160)
-    summary = models.TextField()
-    stage = models.CharField(max_length=30, choices=STAGE_CHOICES, default="Discovery")
-    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="Medium")
-    is_active = models.BooleanField(default=True)
+    project_type = models.CharField(max_length=50, choices=PROJECT_TYPE_CHOICES, default="Road")
+    summary = models.TextField(blank=True)
+    stage = models.CharField(max_length=30, choices=STAGE_CHOICES, default="Draft")
+    
+    footprint = models.GeometryField(srid=4326, null=True, blank=True)
+    planner_notes = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -89,7 +140,20 @@ class PlanningProject(models.Model):
         ordering = ["-updated_at", "title"]
 
     def __str__(self):
-        return f"{self.city} - {self.title}"
+        return f"{self.title} ({self.stage})"
+
+
+class ImpactPrediction(models.Model):
+    project = models.ForeignKey(PlanningProject, on_delete=models.CASCADE, related_name="impact_predictions")
+    traffic_impact = models.CharField(max_length=100, blank=True)
+    crime_risk_delta = models.CharField(max_length=100, blank=True)
+    population_shift = models.CharField(max_length=100, blank=True)
+    economic_activity = models.CharField(max_length=100, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Impact for {self.project.title}"
 
 
 class GeneratedReport(models.Model):
@@ -100,6 +164,7 @@ class GeneratedReport(models.Model):
     ]
 
     city = models.CharField(max_length=50, choices=UserProfile.CITY_CHOICES, default="Nairobi")
+    zone = models.ForeignKey(Zone, on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=180)
     focus = models.CharField(max_length=20, choices=FOCUS_CHOICES, default="safety")
     summary = models.TextField()
