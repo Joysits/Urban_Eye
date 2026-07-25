@@ -22,16 +22,16 @@
   --blush-faint:   rgba(254, 225, 225, 0.06);
 
   /* Glass surfaces */
-  --glass-garnet:  rgba(74, 30, 20, 0.72);
-  --glass-crimson: rgba(124, 29, 36, 0.68);
-  --glass-ruby:    rgba(166, 58, 58, 0.55);
-  --glass-dark:    rgba(18, 6, 6, 0.82);
+  --glass-garnet:  rgba(255, 248, 244, 0.96);
+  --glass-crimson: rgba(246, 230, 225, 0.94);
+  --glass-ruby:    rgba(166, 58, 58, 0.16);
+  --glass-dark:    rgba(255, 250, 247, 0.78);
 
   /* Gradients */
   --grad-brand:    linear-gradient(135deg, var(--garnet) 0%, var(--crimson) 45%, var(--ruby) 80%, var(--ember) 100%);
   --grad-btn:      linear-gradient(135deg, var(--crimson) 0%, var(--ruby) 55%, var(--ember) 100%);
-  --grad-card:     linear-gradient(145deg, rgba(124,29,36,0.45) 0%, rgba(74,30,20,0.65) 100%);
-  --grad-panel:    linear-gradient(160deg, rgba(74,30,20,0.78) 0%, rgba(30,6,6,0.90) 100%);
+  --grad-card:     linear-gradient(145deg, rgba(255,248,244,0.98) 0%, rgba(245,229,224,0.94) 100%);
+  --grad-panel:    linear-gradient(160deg, rgba(255,250,247,0.98) 0%, rgba(245,229,224,0.94) 100%);
 
   /* Text */
   --text-primary:  #FEE1E1;
@@ -60,10 +60,13 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(ellipse at 20% 0%,  rgba(124,29,36,0.35) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(74,30,20,0.40) 0%, transparent 55%),
-    linear-gradient(180deg, #1a0608 0%, #0f0204 55%, #120305 100%);
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.8) 100%),
+    url("./assets/nairobi-skyline.png");
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: cover;
+  background-attachment: fixed;
   color: var(--text-primary);
 }
 
@@ -117,25 +120,22 @@ p { margin-top: 0; }
   padding: 24px 16px;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 25% 15%, rgba(124,29,36,0.30) 0%, transparent 45%),
-    radial-gradient(ellipse at 75% 85%, rgba(74,30,20,0.35) 0%, transparent 50%),
-    #0d0203;
+  background: transparent;
   box-sizing: border-box;
 }
 
-/* Nairobi skyline — transparent layer */
+/* Nairobi skyline — restored backdrop layer */
 .auth-screen::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("./assets/nairobi-skyline.png");
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.30) 42%, rgba(0,0,0,0.78) 100%),
+    url("./assets/nairobi-skyline.png");
   background-repeat: no-repeat;
   background-position: center bottom;
   background-size: cover;
-  opacity: 0.16;
-  filter: saturate(0.6) brightness(0.85);
-  mix-blend-mode: luminosity;
+  opacity: 0; /* disabled in favor of body background */
   pointer-events: none;
   z-index: 0;
 }
@@ -147,9 +147,9 @@ p { margin-top: 0; }
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(13,2,3,0.45)  0%,
-    rgba(74,30,20,0.15) 50%,
-    rgba(13,2,3,0.65)  100%
+    rgba(0,0,0,0.32) 0%,
+    rgba(0,0,0,0.12) 48%,
+    rgba(0,0,0,0.64) 100%
   );
   pointer-events: none;
   z-index: 1;
@@ -200,12 +200,14 @@ p { margin-top: 0; }
 /* ── Auth Form Side ── */
 .auth-form-side {
   padding: 40px 44px;
-  background: rgba(255,255,255,0.95);
+  background: rgba(255,255,255,0.76);
   color: #1a0305;
   display: flex;
   flex-direction: column;
   justify-content: center;
   position: relative;
+  backdrop-filter: blur(6px) saturate(1.02);
+  border: 1px solid rgba(201,107,107,0.08);
 }
 
 .auth-form-side h2 {
@@ -307,20 +309,19 @@ p { margin-top: 0; }
 .input-icon-right:hover { color: var(--crimson); }
 
 /* ── Auth meta ── */
-.auth-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-}
-
-.remember-me {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: #6b2020;
-  user-select: none;
+.auth-card {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  width: 100%;
+  max-width: 940px;
+  min-height: 570px;
+  background: rgba(10,2,2,0.52);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(18,6,6,0.45), 0 0 0 1px rgba(201,107,107,0.12);
+  position: relative;
+  z-index: 5;
 }
 .remember-me input { cursor: pointer; accent-color: var(--crimson); }
 
@@ -622,20 +623,48 @@ p { margin-top: 0; }
 }
 
 .dashboard-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
   gap: 22px;
   width: min(1440px, calc(100% - 32px));
   margin: 0 auto;
   padding: 24px 0 48px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(201,107,107,0.16) 0%, transparent 30%),
+    linear-gradient(135deg, rgba(255,250,247,0.95) 0%, rgba(244,232,228,0.92) 100%);
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+.dashboard-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.02) 45%, rgba(0,0,0,0.18) 100%),
+    url("./assets/nairobi-skyline.png");
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: cover;
+  opacity: 0.46;
+  filter: brightness(0.55) contrast(1.12) saturate(1.08);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-shell > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Sidebar ── */
 .dashboard-sidebar {
-  background: var(--grad-panel);
-  border: 1px solid var(--border-mid);
-  backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-deep);
+  background: rgba(15, 5, 10, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(28px);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.3);
   border-radius: 26px;
   padding: 24px;
   display: flex;
@@ -645,6 +674,7 @@ p { margin-top: 0; }
   position: sticky;
   top: 24px;
   align-self: start;
+  color: var(--text-primary);
 }
 
 .dashboard-sidebar-brand { align-items: flex-start; }
@@ -660,17 +690,18 @@ p { margin-top: 0; }
 .dashboard-sidebar-brand p {
   margin: 4px 0 0;
   font-size: 0.82rem;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* ── User card in sidebar ── */
 .dashboard-user-card {
   padding: 16px;
   border-radius: 18px;
-  background: rgba(201,107,107,0.12);
-  border: 1px solid var(--border-mid);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;
+  color: var(--text-primary);
 }
 .dashboard-user-card::before {
   content: "";
@@ -684,7 +715,7 @@ p { margin-top: 0; }
 .dashboard-user-card span,
 .dashboard-user-card small {
   display: block;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.7);
 }
 .dashboard-user-card strong {
   display: block;
@@ -704,17 +735,17 @@ p { margin-top: 0; }
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
   cursor: pointer;
   text-align: left;
   transition: all 0.22s ease;
   font-size: 0.9rem;
 }
 .dashboard-nav-item:hover {
-  background: rgba(201,107,107,0.14);
-  border-color: var(--border-mid);
-  color: var(--blush);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
   transform: translateX(3px);
 }
 .dashboard-nav-item.active {
@@ -757,10 +788,11 @@ p { margin-top: 0; }
   align-items: center;
   padding: 14px 22px;
   border-radius: 18px;
-  background: var(--glass-garnet);
-  border: 1px solid var(--border-mid);
+  background: linear-gradient(145deg, rgba(255,250,247,0.98) 0%, rgba(245,230,225,0.96) 100%);
+  border: 1px solid rgba(201,107,107,0.18);
   backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 10px 30px rgba(74,30,20,0.1);
+  color: #4c2328;
 }
 
 .dashboard-page-label {
@@ -768,7 +800,7 @@ p { margin-top: 0; }
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--blush);
+  color: #7c1d24;
   font-family: 'Outfit', inherit;
 }
 
@@ -819,15 +851,19 @@ p { margin-top: 0; }
 /* ── Generic panel ── */
 .dashboard-panel {
   border-radius: 22px;
-  background: var(--glass-garnet);
-  border: 1px solid var(--border-dim);
+  background: rgba(15, 5, 10, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 24px;
   color: var(--text-primary);
-  backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.25s ease;
+  backdrop-filter: blur(28px) saturate(1.02);
+  box-shadow: 0 8px 28px rgba(74,30,20,0.06);
+  transition: border-color 0.25s ease, transform 0.25s ease;
 }
-.dashboard-panel:hover { border-color: var(--border-mid); }
+.dashboard-panel:hover {
+  border-color: rgba(201,107,107,0.28);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 36px rgba(74,30,20,0.10);
+}
 
 /* ── Eyebrow labels ── */
 .eyebrow {
@@ -846,9 +882,10 @@ p { margin-top: 0; }
   justify-content: space-between;
   align-items: end;
   gap: 20px;
-  background:
-    linear-gradient(135deg, rgba(124,29,36,0.50) 0%, rgba(74,30,20,0.75) 100%);
-  border-color: var(--border-mid);
+  background: rgba(124,29,36,0.08);
+  border-color: rgba(201,107,107,0.10);
+  color: #4c2328;
+  backdrop-filter: blur(6px) saturate(1.03);
 }
 
 .dashboard-hero-banner .dashboard-copy { max-width: 58ch; }
@@ -857,11 +894,11 @@ p { margin-top: 0; }
 .dashboard-hero-badges span {
   padding: 8px 14px;
   border-radius: 999px;
-  background: rgba(201,107,107,0.16);
-  border: 1px solid var(--border-mid);
-  color: var(--ember-light);
+  background: rgba(255,255,255,0.78);
+  border: 1px solid rgba(201,107,107,0.22);
+  color: #7c1d24;
   font-size: 0.82rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* ── Section heading ── */
@@ -877,7 +914,7 @@ p { margin-top: 0; }
   color: var(--text-muted);
 }
 
-.dashboard-copy { color: var(--text-muted); line-height: 1.7; }
+.dashboard-copy { color: rgba(255, 255, 255, 0.8); line-height: 1.7; }
 .dashboard-title { max-width: 14ch; }
 
 /* ── Stat cards ── */
@@ -1083,24 +1120,25 @@ p { margin-top: 0; }
 
 /* ── Map ── */
 .map-section {
-  border: 1px solid var(--border-mid);
-  background: var(--glass-garnet);
-  backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-card);
-  padding: 24px;
-  border-radius: 22px;
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
 }
 .map-canvas {
   width: 100%;
   height: min(60vh, 560px);
-  border-radius: 18px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--border-dim);
+  border: none;
+  background: transparent;
 }
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background: #1a0608;
+  background: transparent;
 }
 
 /* ======================================================
@@ -1331,10 +1369,25 @@ p { margin-top: 0; }
 
 .ai-forecast-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0,1fr));
   gap: 12px;
   margin-top: 16px;
 }
+
+.ai-prediction-card.ai-card-cta {
+  background: rgba(255,255,255,0.64);
+  border: 1px solid rgba(201,107,107,0.10);
+  color: #4c2328;
+  padding: 18px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ai-prediction-card.ai-card-cta .ai-card-header { align-items: center; display: flex; gap: 12px; }
+
+.ai-card-icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(124,29,36,0.06); }
 .ai-forecast-item {
   padding: 14px;
   border-radius: 16px;

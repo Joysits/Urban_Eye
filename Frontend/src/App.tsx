@@ -302,10 +302,13 @@ export default function App() {
   const [crimePrediction, setCrimePrediction] = useState<CrimePrediction | null>(null);
   const [impactPrediction, setImpactPrediction] = useState<ImpactPrediction | null>(null);
   const [isPredictionLoading, setIsPredictionLoading] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<string>("");
 
   // Map refs
-  const mapRef = useRef<HTMLDivElement | null>(null);
+  const analysisMapRef = useRef<HTMLDivElement | null>(null);
+  const planningMapRef = useRef<HTMLDivElement | null>(null);
   const activeMapInstance = useRef<L.Map | null>(null);
+  const activeMapContainer = useRef<string | null>(null);
 
   // Auto clear alerts
   useEffect(() => {
@@ -434,34 +437,63 @@ export default function App() {
 
   // Map initialization
   useEffect(() => {
-    if (!isAuthenticated || !mapRef.current) {
-      if (activeMapInstance.current) { activeMapInstance.current.remove(); activeMapInstance.current = null; }
+    if (!isAuthenticated) {
+      if (activeMapInstance.current) { activeMapInstance.current.remove(); activeMapInstance.current = null; activeMapContainer.current = null; }
       return;
     }
+
+    // Only attach maps when on Analysis or Planning pages
+    if (dashboardPage !== "analysis" && dashboardPage !== "planning") {
+      // if leaving map pages, keep the instance but don't attach to home
+      return;
+    }
+    const target = dashboardPage === "analysis" ? analysisMapRef.current : planningMapRef.current;
+    if (!target) return;
+
     const cityConfig = CITY_COORDS[currentUser?.city || "Nairobi"];
-    if (activeMapInstance.current) activeMapInstance.current.remove();
 
-    const map = L.map(mapRef.current).setView(cityConfig.coords, cityConfig.zoom);
-    activeMapInstance.current = map;
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-
-    const markers = dashboardOverview?.incident_markers ?? [];
-    if (markers.length > 0) {
-      markers.forEach((marker) => {
-        L.marker([marker.latitude, marker.longitude]).addTo(map)
-          .bindPopup(`<b>${marker.title}</b><br/>Severity: ${marker.severity}<br/>Status: ${marker.status}`);
-      });
+    // If map already exists on same container, just update view/markers
+    if (activeMapInstance.current && activeMapContainer.current === target.id) {
+      activeMapInstance.current.setView(cityConfig.coords, cityConfig.zoom);
     } else {
-      L.marker(cityConfig.coords).addTo(map).bindPopup(`<b>${cityConfig.label}</b>`).openPopup();
+      // Remove existing map if switching containers
+      if (activeMapInstance.current) {
+        try { activeMapInstance.current.remove(); } catch { /* ignore */ }
+        activeMapInstance.current = null; activeMapContainer.current = null;
+      }
+
+      const map = L.map(target).setView(cityConfig.coords, cityConfig.zoom);
+      activeMapInstance.current = map;
+      activeMapContainer.current = target.id || null;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
     }
 
-    return () => {
-      if (activeMapInstance.current) { activeMapInstance.current.remove(); activeMapInstance.current = null; }
-    };
-  }, [isAuthenticated, currentUser?.city, dashboardOverview]);
+    // Add markers (clear previous layer if any)
+    try {
+      const markers = dashboardOverview?.incident_markers ?? [];
+      // remove existing marker layers by clearing all layers except tile layers
+      activeMapInstance.current!.eachLayer((layer) => {
+        // keep TileLayer instances
+        if ((layer as any)._url) return;
+        try { activeMapInstance.current!.removeLayer(layer); } catch {}
+      });
+
+      if ((dashboardOverview?.incident_markers ?? []).length > 0) {
+        (dashboardOverview?.incident_markers || []).forEach((marker) => {
+          L.marker([marker.latitude, marker.longitude]).addTo(activeMapInstance.current!)
+            .bindPopup(`<b>${marker.title}</b><br/>Severity: ${marker.severity}<br/>Status: ${marker.status}`);
+        });
+      } else {
+        L.marker(cityConfig.coords).addTo(activeMapInstance.current!).bindPopup(`<b>${cityConfig.label}</b>`).openPopup();
+      }
+    } catch (e) { /* ignore map layering errors while switching */ }
+
+    // do not remove map on cleanup unless unauthenticating
+    return () => {};
+  }, [isAuthenticated, currentUser?.city, dashboardOverview, dashboardPage]);
 
   // ─── Auth Handlers ────────────────────────────────────────────────────────────
 
@@ -470,26 +502,58 @@ export default function App() {
     const loginIdentifier = signInUser.trim();
     if (!loginIdentifier || !signInPassword) { setAlert({ message: "Please fill in all credentials.", type: "error" }); return; }
     setAlert(null); setIsLoading(true);
+    (async () => {
+      const payload = JSON.stringify({ username: loginIdentifier, password: signInPassword });
+      const headers = { "Content-Type": "application/json" };
 
-    fetch(apiUrl("/api/auth/login/"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: loginIdentifier, password: signInPassword })
-    })
-      .then(async (res) => { const data = await readJsonResponse(res); if (!res.ok) throw new Error(data?.error || data?.detail || "Invalid credentials."); return data; })
-      .then((data) => {
-        if (!data) throw new Error("Empty login response.");
-        localStorage.setItem("token", data.token);
-        const user: User = {
-          name: data.user.name || data.user.username, email: data.user.email,
-          city: data.user.profile?.focus_city || "Nairobi", role: data.user.profile?.agency_role || "Urban Planner"
-        };
-        localStorage.setItem("user", JSON.stringify(user));
-        setCurrentUser(user); setIsAuthenticated(true);
-        setAlert({ message: `Welcome back, ${user.name}!`, type: "success" });
-      })
-      .catch((err) => setAlert({ message: err.message || "Failed to connect.", type: "error" }))
-      .finally(() => setIsLoading(false));
+      // Try a few sensible URL variants in case the configured base/path differs.
+      const attempts: string[] = [];
+      if (API_BASE_URL) {
+        attempts.push(apiUrl('/api/auth/login/'));
+        attempts.push(apiUrl('/auth/login/'));
+        attempts.push(`${API_BASE_URL.replace(/\/api$/, '')}/auth/login/`);
+      } else {
+        attempts.push('/api/auth/login/', '/auth/login/');
+      }
+
+      let lastErr: any = null;
+      const tried: string[] = [];
+      for (const url of attempts) {
+        try {
+          tried.push(url);
+          console.debug('Attempting login POST to', url);
+          const res = await fetch(url, { method: 'POST', headers, body: payload, mode: 'cors' });
+          const data = await readJsonResponse(res);
+          if (!res.ok) throw new Error(data?.error || data?.detail || res.statusText || 'Login failed');
+
+          if (!data) throw new Error('Empty login response.');
+          localStorage.setItem('token', data.token);
+          const user: User = {
+            name: data.user?.name || data.user?.username || 'User',
+            email: data.user?.email || '',
+            city: data.user?.profile?.focus_city || 'Nairobi',
+            role: data.user?.profile?.agency_role || 'Urban Planner'
+          };
+          localStorage.setItem('user', JSON.stringify(user));
+          setCurrentUser(user); setIsAuthenticated(true);
+          setAlert({ message: `Welcome back, ${user.name}!`, type: 'success' });
+          lastErr = null;
+          break; // success
+        } catch (err: any) {
+          lastErr = err;
+          // continue to next attempt
+        }
+      }
+
+      if (lastErr) {
+        console.error('Login failed. Attempts:', tried, lastErr);
+        const first = tried[0] || attempts[0] || '/api/auth/login/';
+        const msgBase = (lastErr && lastErr.message) ? lastErr.message : 'Failed to connect to the API.';
+        const msg = `${msgBase} Tried: ${first} ${tried.length>1?`(+${tried.length-1} more)` : ''}. Ensure the backend is running at the configured VITE_API_BASE_URL and CORS allows requests from this origin.`;
+        setAlert({ message: msg, type: 'error' });
+      }
+      setIsLoading(false);
+    })();
   };
 
   const handleSignUp = (e: React.FormEvent) => {
@@ -621,122 +685,43 @@ export default function App() {
       );
     }
 
-    const pop  = populationPrediction;
-    const crime = crimePrediction;
-    const impact = impactPrediction;
-
-    const formatPop = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : `${n}`;
-
+    // Replace numeric AI preview cards with CTAs to real workflows
     return (
       <div className="ai-predictions-row">
-        {/* Population Forecast Card */}
-        <div className="ai-prediction-card ai-card-population fade-in">
+        <div className="ai-prediction-card ai-card-cta">
           <div className="ai-card-header">
-            <div className="ai-card-icon">🏙️</div>
             <div>
-              <p className="ai-card-title">Population Forecast</p>
-              <p className="ai-card-subtitle">30-year growth projection</p>
+              <p className="ai-card-title">Explore Area Analysis</p>
+              <p className="ai-card-subtitle">Select or draw a zone to view crime, population, and landuse layers.</p>
             </div>
           </div>
-          {pop ? (
-            <>
-              <div className="ai-metric-big">{formatPop(pop.projected_population)}</div>
-              <div className="ai-metric-label">Projected by {pop.year_range} (+{pop.growth_rate_pct.toFixed(1)}%/yr)</div>
-              <div className="prediction-bars">
-                <div className="prediction-bar-row">
-                  <span className="prediction-bar-label">Housing gap</span>
-                  <div className="prediction-bar-track">
-                    <div className="prediction-bar-fill" style={{ width: `${Math.min(100, pop.housing_gap / 500)}%` }} />
-                  </div>
-                  <span className="prediction-bar-val">{formatPop(pop.housing_gap)}</span>
-                </div>
-                <div className="prediction-bar-row">
-                  <span className="prediction-bar-label">Current pop.</span>
-                  <div className="prediction-bar-track">
-                    <div className="prediction-bar-fill" style={{ width: "65%" }} />
-                  </div>
-                  <span className="prediction-bar-val">{formatPop(pop.current_population)}</span>
-                </div>
-              </div>
-              <div className="ai-confidence">
-                <span className="ai-confidence-dot" />
-                Infrastructure pressure: {pop.infrastructure_pressure}
-              </div>
-            </>
-          ) : (
-            <><div className="ai-skeleton tall" /><div className="ai-skeleton" /></>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <button className="btn-submit" onClick={() => setDashboardPage("analysis")}>Open Area Analysis</button>
+          </div>
         </div>
 
-        {/* Crime Prediction Card */}
-        <div className="ai-prediction-card ai-card-crime fade-in">
+        <div className="ai-prediction-card ai-card-cta">
           <div className="ai-card-header">
-            <div className="ai-card-icon">🔴</div>
             <div>
-              <p className="ai-card-title">Crime Prediction</p>
-              <p className="ai-card-subtitle">30-day risk forecast</p>
+              <p className="ai-card-title">Development Planning</p>
+              <p className="ai-card-subtitle">Sketch proposals, run impact simulations, and save draft plans.</p>
             </div>
           </div>
-          {crime ? (
-            <>
-              <div className="ai-metric-big">{crime.risk_index}<span style={{ fontSize: "1.2rem", fontWeight: 400, opacity: 0.7 }}>/100</span></div>
-              <div className="ai-metric-label">Risk index — {crime.trend} trend · {crime.forecast_30_day}</div>
-              <div className="prediction-bars">
-                {crime.category_breakdown.slice(0,3).map((cat) => (
-                  <div key={cat.category} className="prediction-bar-row">
-                    <span className="prediction-bar-label">{cat.category}</span>
-                    <div className="prediction-bar-track">
-                      <div className="prediction-bar-fill" style={{ width: `${cat.pct}%` }} />
-                    </div>
-                    <span className="prediction-bar-val">{cat.pct}%</span>
-                  </div>
-                ))}
-              </div>
-              <div className="ai-confidence">
-                <span className="ai-confidence-dot" />
-                Hotspot: {crime.predicted_hotspot_zone} · {crime.confidence_pct}% conf.
-              </div>
-            </>
-          ) : (
-            <><div className="ai-skeleton tall" /><div className="ai-skeleton" /></>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <button className="btn-submit" onClick={() => setDashboardPage("planning")}>Open Planning Tools</button>
+          </div>
         </div>
 
-        {/* Impact Prediction Card */}
-        <div className="ai-prediction-card ai-card-impact fade-in">
+        <div className="ai-prediction-card ai-card-cta">
           <div className="ai-card-header">
-            <div className="ai-card-icon">⚡</div>
             <div>
-              <p className="ai-card-title">Impact Assessment</p>
-              <p className="ai-card-subtitle">Planning project outcomes</p>
+              <p className="ai-card-title">Reports & Export</p>
+              <p className="ai-card-subtitle">Export current map view and selected data to the Report Generator.</p>
             </div>
           </div>
-          {impact ? (
-            <>
-              <div className="impact-score-ring">
-                <ImpactRing score={impact.impact_score} />
-                <div>
-                  <div className="ai-metric-label" style={{ marginBottom: 4 }}>Impact score</div>
-                  <div style={{ fontSize: "0.88rem", color: "var(--ember-light)", fontWeight: 600 }}>{impact.execution_readiness} readiness</div>
-                </div>
-              </div>
-              <div className="prediction-bars">
-                <div className="prediction-bar-row">
-                  <span className="prediction-bar-label">Risk reduc.</span>
-                  <div className="prediction-bar-track">
-                    <div className="prediction-bar-fill" style={{ width: `${impact.risk_reduction_pct}%` }} />
-                  </div>
-                  <span className="prediction-bar-val">{impact.risk_reduction_pct}%</span>
-                </div>
-              </div>
-              <div className="ai-confidence">
-                <span className="ai-confidence-dot" />
-                ROI: {impact.roi_estimate} · {impact.projects_analyzed} projects
-              </div>
-            </>
-          ) : (
-            <><div className="ai-skeleton tall" /><div className="ai-skeleton" /></>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <button className="btn-submit" onClick={() => setDashboardPage("reports")}>Go to Report Generator</button>
+          </div>
         </div>
       </div>
     );
@@ -756,66 +741,48 @@ export default function App() {
           <div className="dashboard-grid-2">
             <div className="dashboard-panel">
               <p className="eyebrow">Area Analysis</p>
-              <h2 style={{ color: "var(--blush)" }}>Hotspot & Density Overview</h2>
-              <p className="dashboard-copy">Track incident clusters, population pressure, and city risk indicators for {currentUser?.city}.</p>
-              <div className="mini-metric-grid">
-                <div className="mini-metric"><span>Risk score</span><strong>{analysis?.risk_score ?? 0} / 100</strong></div>
-                <div className="mini-metric"><span>Active alerts</span><strong>{analysis?.active_alerts ?? 0}</strong></div>
-                <div className="mini-metric"><span>Growth pressure</span><strong>{analysis?.growth_pressure ?? "N/A"}</strong></div>
-                <div className="mini-metric"><span>Priority zones</span><strong>{analysis?.priority_zones ?? 0}</strong></div>
-              </div>
-            </div>
-            <div className="dashboard-panel chart-panel">
-              <h3>Risk Distribution</h3>
-              <div className="bar-chart">
-                {(analysis?.risk_distribution.labels || ["Low","Moderate","High","Critical"]).map((label, index) => {
-                  const value = analysis?.risk_distribution.values[index] || 0;
-                  const barHeight = Math.max(12, Math.round((value / maxDistribution) * 100));
-                  return <span key={label} title={`${label}: ${value}`} style={{ height: `${barHeight}%` }} />;
-                })}
-              </div>
-            </div>
-          </div>
+              <h2 style={{ color: "var(--blush)" }}>Investigative View</h2>
+              <p className="dashboard-copy">Draw a polygon, drop a pin, or select a predefined zone to inspect crime, population and land-use layers.</p>
 
-          {/* AI Crime Forecast Section */}
-          <div className="ai-analysis-section">
-            <p className="eyebrow">AI Intelligence Layer</p>
-            <h3>Crime Prediction & Forecast</h3>
-            <p className="dashboard-copy" style={{ marginBottom: 0 }}>
-              Machine-learning risk index computed from incident history, open case ratios, and zone severity for {currentUser?.city}.
-            </p>
-            {crimePrediction ? (
-              <div className="ai-forecast-grid">
-                <div className="ai-forecast-item">
-                  <span>30-Day Risk Index</span>
-                  <strong>{crimePrediction.risk_index} / 100</strong>
+              <div className="map-tools" style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn-submit" onClick={() => setAlert({ message: 'Draw polygon tool (stub)', type: 'success' })}>Draw polygon</button>
+                  <button className="btn-submit" onClick={() => setAlert({ message: 'Drop pin tool (stub)', type: 'success' })}>Drop pin / radius</button>
+                  <select onChange={(e) => setAlert({ message: `Predefined zone: ${e.target.value}`, type: 'success' })}>
+                    <option value="">Pick predefined zone</option>
+                    <option value="ward-1">Ward 1</option>
+                    <option value="ward-2">Ward 2</option>
+                  </select>
                 </div>
-                <div className="ai-forecast-item">
-                  <span>Predicted Hotspot</span>
-                  <strong>{crimePrediction.predicted_hotspot_zone}</strong>
+
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ marginRight: 12 }}><input type="checkbox" defaultChecked /> Crime heatmap</label>
+                  <label style={{ marginRight: 12 }}><input type="checkbox" defaultChecked /> Population density</label>
+                  <label style={{ marginRight: 12 }}><input type="checkbox" /> Infrastructure</label>
+                  <label style={{ marginRight: 12 }}><input type="checkbox" /> Land use</label>
                 </div>
-                <div className="ai-forecast-item">
-                  <span>Top Category</span>
-                  <strong>{crimePrediction.top_category}</strong>
-                </div>
-                <div className="ai-forecast-item">
-                  <span>Forecast Outlook</span>
-                  <strong>{crimePrediction.forecast_30_day}</strong>
-                </div>
-                <div className="ai-forecast-item">
-                  <span>Trend Direction</span>
-                  <strong>{crimePrediction.trend}</strong>
-                </div>
-                <div className="ai-forecast-item">
-                  <span>Model Confidence</span>
-                  <strong>{crimePrediction.confidence_pct}%</strong>
+
+                <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                  <button className="btn-submit" onClick={() => setAlert({ message: 'Enter comparison mode (stub)', type: 'success' })}>Enter Comparison Mode</button>
+                  <button className="btn-submit" onClick={() => setAlert({ message: 'Export to Report (stub)', type: 'success' })}>Export to Report</button>
                 </div>
               </div>
-            ) : (
-              <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-                <div className="ai-skeleton" /><div className="ai-skeleton short" />
+
+              <div className="analysis-summary" style={{ marginTop: 20, opacity: 0.9 }}>
+                <h4 style={{ margin: '6px 0' }}>Summary</h4>
+                <p className="dashboard-copy" style={{ marginTop: 6 }}>Select an area to see a concise summary here (incidents, population, notes).</p>
+                <div style={{ marginTop: 10 }}>
+                  <small style={{ color: 'var(--text-muted)' }}>No selection yet.</small>
+                </div>
               </div>
-            )}
+            </div>
+
+            <div className="dashboard-panel">
+              <h3>Map View</h3>
+              <div ref={analysisMapRef} id="analysis-map" className="map-canvas" style={{ height: 420, borderRadius: 12, marginTop: 8 }}>
+                <div style={{ padding: 24, color: '#6e4b4f' }}>Interactive map placeholder — use the tools to draw or select an area.</div>
+              </div>
+            </div>
           </div>
         </section>
       );
@@ -828,43 +795,49 @@ export default function App() {
         <section className="dashboard-page dashboard-grid-2 fade-in">
           <div className="dashboard-panel">
             <p className="eyebrow">Development Planning</p>
-            <h2 style={{ color: "var(--blush)" }}>Priority Project Pipeline</h2>
-            <div className="timeline-list">
-              {planningProjects.map((project) => (
-                <article key={project.id}>
-                  <strong>{project.title} <span style={{ color: "var(--ember)", fontSize: "0.78rem", fontWeight: 600 }}>· {project.priority}</span></strong>
-                  <span>{project.summary}</span>
-                </article>
-              ))}
-              {planningProjects.length === 0 && (
-                <article><strong>No active projects</strong><span>Pipeline is empty for this city.</span></article>
-              )}
+            <h2 style={{ color: "var(--blush)" }}>Design & Simulation</h2>
+            <p className="dashboard-copy">Draw proposed infrastructure or place a building footprint and run an impact simulation.</p>
+
+            <div className="planning-tools" style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-submit" onClick={() => setAlert({ message: 'Draw road (stub)', type: 'success' })}>Draw road</button>
+                <button className="btn-submit" onClick={() => setAlert({ message: 'Place building (stub)', type: 'success' })}>Place building</button>
+                <select onChange={(e) => setAlert({ message: `Project type: ${e.target.value}`, type: 'success' })}>
+                  <option value="">Select project type</option>
+                  <option value="road">Road</option>
+                  <option value="hospital">Hospital</option>
+                  <option value="school">School</option>
+                  <option value="residential">Residential</option>
+                </select>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <button className="btn-submit" onClick={() => setAlert({ message: 'Run impact prediction (stub)', type: 'success' })}>Run impact prediction</button>
+                <button className="btn-submit" onClick={() => setAlert({ message: 'Save draft plan (stub)', type: 'success' })} style={{ marginLeft: 8 }}>Save as draft</button>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <label>Status:</label>
+                <select style={{ marginLeft: 8 }} onChange={(e) => setAlert({ message: `Status: ${e.target.value}`, type: 'success' })}>
+                  <option value="draft">Draft</option>
+                  <option value="review">Under review</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <label>Timeline / Phasing (notes):</label>
+                <textarea placeholder="Describe phases or timeline" style={{ width: '100%', minHeight: 80, marginTop: 8 }} />
+              </div>
             </div>
           </div>
+
           <div className="dashboard-panel">
-            <h3 style={{ color: "var(--blush)" }}>Implementation Stages</h3>
-            <div className="stage-pills">
-              {stageOrder.map((stage) => (
-                <span key={stage}>{stage} ({planningStageCounts[stage] || 0})</span>
-              ))}
+            <h3 style={{ color: 'var(--blush)' }}>Planning Map</h3>
+            <div ref={planningMapRef} id="planning-map" className="map-canvas" style={{ height: 520, borderRadius: 12, marginTop: 8 }}>
+              <div style={{ padding: 24, color: '#6e4b4f' }}>Interactive planning map placeholder — draw proposals to run simulations.</div>
             </div>
-            {impactPrediction && (
-              <div style={{ marginTop: 24 }}>
-                <p className="eyebrow">AI Impact Score</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <ImpactRing score={impactPrediction.impact_score} />
-                  <div>
-                    <p style={{ margin: 0, color: "var(--blush)", fontWeight: 700 }}>{impactPrediction.impact_score}/100</p>
-                    <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                      {impactPrediction.execution_readiness} readiness · {impactPrediction.projects_analyzed} projects analyzed
-                    </p>
-                  </div>
-                </div>
-                <ul style={{ margin: "16px 0 0", padding: "0 0 0 18px", color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: 1.8 }}>
-                  {impactPrediction.highlights.map((h, i) => <li key={i}>{h}</li>)}
-                </ul>
-              </div>
-            )}
           </div>
         </section>
       );
@@ -923,68 +896,11 @@ export default function App() {
             <h1 className="dashboard-title" style={{ color: "var(--blush)", fontSize: "clamp(1.8rem,3vw,2.8rem)" }}>City Intelligence at a Glance.</h1>
             <p className="dashboard-copy">Monitor live risk signals, planning priorities, AI forecasts, and reporting workflows from one workspace.</p>
           </div>
-          <div className="dashboard-hero-badges">
-            <span>🟢 Live profile sync</span>
-            <span>📍 Geo analytics ready</span>
-            <span>🤖 AI predictions active</span>
-          </div>
         </div>
 
         {/* AI Prediction Cards Row */}
         {renderAIPredictionCards()}
 
-        <div className="dashboard-grid-2">
-          <div className="dashboard-panel stats-panel">
-            <div className="stat-card"><span>Focus city</span><strong>{currentUser?.city}</strong></div>
-            <div className="stat-card"><span>Access role</span><strong>{currentUser?.role}</strong></div>
-            <div className="stat-card"><span>System status</span><strong>{isDashboardLoading ? "⟳ Syncing" : "✓ Connected"}</strong></div>
-            {crimePrediction && <div className="stat-card"><span>AI risk index</span><strong style={{ color: crimePrediction.risk_index > 60 ? "var(--ember)" : "var(--blush)" }}>{crimePrediction.risk_index} / 100</strong></div>}
-          </div>
-
-          <div className="dashboard-panel quick-actions-panel">
-            <h3>Quick Actions</h3>
-            <div className="quick-actions-grid">
-              <button type="button" onClick={() => setDashboardPage("analysis")}>📊 Open area analysis</button>
-              <button type="button" onClick={() => setDashboardPage("planning")}>🗺️ Review planning tasks</button>
-              <button type="button" onClick={() => setDashboardPage("reports")}>📋 Generate a report</button>
-              <button type="button" onClick={() => setDashboardPage("home")}>🔄 Refresh overview</button>
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-grid-2">
-          <section className="dashboard-panel">
-            <h2 style={{ color: "var(--blush)" }}>Active Priorities</h2>
-            <div className="priority-list">
-              {(dashboardOverview?.top_priorities || ["Incident monitoring","Growth planning","Reporting"]).map((priority) => (
-                <article key={priority}>
-                  <strong>{priority}</strong>
-                  <p>Priority track currently active for {currentUser?.city}. Review details from analysis and planning modules.</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="dashboard-panel">
-            <h2 style={{ color: "var(--blush)" }}>Current Status</h2>
-            <div className="status-list">
-              <div><span>Session</span><strong>Active</strong></div>
-              <div><span>Sync mode</span><strong>{isDashboardLoading ? "Refreshing" : "Automatic"}</strong></div>
-              <div><span>Last update</span><strong>{formatTimestamp(dashboardOverview?.updated_at)}</strong></div>
-              {populationPrediction && <div><span>Pop. forecast</span><strong>{(populationPrediction.growth_rate_pct).toFixed(1)}% growth/yr</strong></div>}
-            </div>
-          </section>
-        </div>
-
-        <section className="map-section dashboard-panel">
-          <div className="section-heading">
-            <div>
-              <h2 style={{ color: "var(--blush)" }}>City Intelligence Map</h2>
-              <p>Active incident overlay centered on {currentUser?.city}, Kenya.</p>
-            </div>
-          </div>
-          <div ref={mapRef} className="map-canvas" aria-label={`Interactive map of ${currentUser?.city}`} />
-        </section>
       </section>
     );
   };
@@ -1073,13 +989,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="form-grid-2">
-                    <div className="input-group">
-                      <label htmlFor="signup-city">Focus City</label>
-                      <div className="input-wrapper"><MapPinIcon /><select id="signup-city" value={signUpCity} onChange={(e) => setSignUpCity(e.target.value)}>
-                        <option value="Nairobi">Nairobi</option><option value="Mombasa">Mombasa</option><option value="Eldoret">Eldoret</option>
-                      </select></div>
-                    </div>
-                    <div className="input-group">
+                    <div className="input-group" style={{ gridColumn: 'span 2' }}>
                       <label htmlFor="signup-role">Agency Role</label>
                       <div className="input-wrapper"><BriefcaseIcon /><select id="signup-role" value={signUpRole} onChange={(e) => setSignUpRole(e.target.value)}>
                         <option value="Urban Planner">Urban Planner</option><option value="Law Enforcement">Law Enforcement</option>
@@ -1201,8 +1111,16 @@ export default function App() {
               {dashboardNavItems.find((item) => item.id === dashboardPage)?.label}
             </span>
           </div>
-          <div className="nav-user">
-            <span className="user-badge">{currentUser?.city} / {currentUser?.role}</span>
+          <div className="nav-user" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <select value={currentUser?.city || 'Nairobi'} style={{ padding: '6px 12px', borderRadius: '20px', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', outline: 'none' }} onChange={(e) => {
+                const newCity = e.target.value;
+                const updated = { ...(currentUser || { name: '', email: '', city: newCity, role: '' }), city: newCity };
+                localStorage.setItem('user', JSON.stringify(updated));
+                setCurrentUser(updated);
+              }}>
+                {Object.keys(CITY_COORDS).map((c) => <option style={{ color: 'black' }} key={c} value={c}>{c}</option>)}
+              </select>
+            <span className="user-badge">{currentUser?.role}</span>
           </div>
         </nav>
 
