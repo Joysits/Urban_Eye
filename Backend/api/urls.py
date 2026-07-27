@@ -13,6 +13,10 @@ from .views import (
     PlanningProjectViewSet,
     ImpactPredictionViewSet,
     GeneratedReportViewSet,
+    AreaAnalysisDetailView,
+    CrimeTrendView,
+    InfrastructureNearbyView,
+    GenerateReportFromAnalysisView,
     health_check,
 )
 
@@ -31,10 +35,16 @@ urlpatterns = [
 
     # Auth
     path("auth/register/",       RegisterView.as_view(),      name="auth_register"),
-    path("auth/login/",          LoginView.as_view(),          name="auth_login"),
-    path("auth/logout/",         LogoutView.as_view(),         name="auth_logout"),
-    path("auth/profile/",        UserProfileView.as_view(),    name="auth_profile"),
-    path("auth/password-reset/", PasswordResetView.as_view(),  name="auth_password_reset"),
+    path("auth/login/",          LoginView.as_view(),         name="auth_login"),
+    path("auth/logout/",         LogoutView.as_view(),        name="auth_logout"),
+    path("auth/profile/",        UserProfileView.as_view(),   name="auth_profile"),
+    path("auth/password-reset/", PasswordResetView.as_view(), name="auth_password_reset"),
+
+    # Area Analysis / Intelligence Aggregation Endpoints
+    path("analysis/detail/",                AreaAnalysisDetailView.as_view(),          name="area_analysis_detail"),
+    path("analysis/crime-trend/",           CrimeTrendView.as_view(),                  name="crime_trend"),
+    path("analysis/infrastructure-nearby/", InfrastructureNearbyView.as_view(),        name="infrastructure_nearby"),
+    path("analysis/generate-report/",       GenerateReportFromAnalysisView.as_view(),  name="generate_report_from_analysis"),
 
     # Spatial API endpoints
     path("", include(router.urls)),
