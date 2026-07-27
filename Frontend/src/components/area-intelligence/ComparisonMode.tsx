@@ -70,7 +70,8 @@ function ZoneCard({ data, label, colorClass }: {
     );
   }
 
-  const maxCrime = Math.max(...data.crime_breakdown.map(c => c.count), 1);
+  const filteredCrime = (data.crime_breakdown ?? []).filter(c => c.category !== 'Other');
+  const maxCrime = Math.max(...filteredCrime.map(c => c.count), 1);
 
   return (
     <div className={`comp-card fade-in comp-card-${colorClass}`}>
@@ -113,7 +114,7 @@ function ZoneCard({ data, label, colorClass }: {
 
       <div className="comp-breakdown-section">
         <p className="comp-breakdown-title">Crime by Category</p>
-        {data.crime_breakdown.slice(0, 5).map(item => (
+        {filteredCrime.slice(0, 5).map(item => (
           <MiniBar key={item.category} value={item.count} max={maxCrime} label={item.category} />
         ))}
       </div>

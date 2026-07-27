@@ -1,126 +1,151 @@
 import React from 'react';
-import type { AnalysisData, CrimeTrendData, InfrastructureNearby } from '../../types';
+import type { AnalysisData, InfrastructureNearby } from '../../types';
 import RiskScoreRing from './RiskScoreRing';
-import CrimeTrendChart from './CrimeTrendChart';
 
 interface Props {
   data: AnalysisData | null;
-  trendData: CrimeTrendData | null;
   infraNearby: InfrastructureNearby | null;
   loading: boolean;
-  trendLoading: boolean;
   onExportReport: () => void;
   exportLoading: boolean;
   onSwitchToReports?: () => void;
 }
 
-const INFRA_ICONS: Record<string, string> = {
-  School: '🏫', Hospital: '🏥', Road: '🛣️', Power: '⚡', Water: '💧', Other: '🏗️',
+const CATEGORY_COLORS: Record<string, string> = {
+  Theft:     '#ef4444',
+  Assault:   '#f97316',
+  Traffic:   '#3b82f6',
+  Vandalism: '#eab308',
+  Robbery:   '#8b5cf6',
+  Burglary:  '#10b981',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  Low: '#48bb78', Moderate: '#ed8936', High: '#f56565', Critical: '#9f7aea',
+  Low: '#10b981', Moderate: '#f59e0b', High: '#ef4444', Critical: '#8b5cf6',
 };
 
 export default function SummaryPanel({
-  data, trendData, infraNearby, loading, trendLoading,
+  data, infraNearby, loading,
   onExportReport, exportLoading, onSwitchToReports,
 }: Props) {
   if (loading || !data) {
     return (
-      <div className="summary-panel">
+      <div className="summary-panel-refined">
         <div className="summary-loading">
           <div className="spinner" />
-          <p>Loading area data…</p>
+          <p>Loading location intelligence data…</p>
         </div>
       </div>
     );
   }
 
+  // Filter out 'Other' category from Crime Breakdown
+  const filteredCrimeBreakdown = (data.crime_breakdown ?? []).filter(c => c.category !== 'Other');
+
+  // Filter infrastructure summary
   const infraData =
     infraNearby?.infrastructure ??
-    data.infrastructure_summary.map(i => ({ infra_type: i.type, count: i.count }));
+    (data.infrastructure_summary ?? []).map(i => ({
+      infra_type: (i as { infra_type?: string; type?: string }).infra_type || (i as { infra_type?: string; type?: string }).type || 'Facility',
+      count: i.count,
+    }));
 
-  const recentIncidents = (data.recent_incidents ?? []).slice(0, 5).map(inc => {
-    const p = (inc as { properties?: Record<string, string> }).properties;
+  const recentIncidents = (Array.isArray(data.recent_incidents)
+    ? data.recent_incidents
+    : (data.recent_incidents as { features?: unknown[] })?.features ?? []
+  ).slice(0, 5).map((inc: unknown) => {
+    const item = inc as { id: number; properties?: Record<string, string>; category?: string; severity?: string; description?: string };
+    const p = item.properties;
     return {
-      id: inc.id,
-      category: p?.category ?? (inc as { category?: string }).category ?? 'Unknown',
-      severity: p?.severity ?? (inc as { severity?: string }).severity ?? 'Moderate',
-      description: p?.description ?? (inc as { description?: string }).description ?? '',
+      id: item.id,
+      category: p?.category ?? item.category ?? 'Incident',
+      severity: p?.severity ?? item.severity ?? 'Moderate',
+      description: p?.description ?? item.description ?? '',
     };
   });
 
+  const locationName = data.zone_name === 'All Zones (Nairobi)' || data.zone_name.startsWith('All Zones')
+    ? `All Locations (${data.city})`
+    : data.zone_name;
+
+  const maxCrimeCount = Math.max(...filteredCrimeBreakdown.map(c => c.count), 1);
+
   return (
-    <div className="summary-panel fade-in">
+    <div className="summary-panel-refined fade-in">
       {/* Header */}
-      <div className="summary-header">
+      <div className="summary-ref-header">
         <div>
-          <h2 className="summary-title">{data.zone_name}</h2>
-          <span className="summary-subtitle">{data.city} • Area Intelligence</span>
+          <h2 className="summary-ref-title">{locationName}</h2>
+          <span className="summary-ref-subtitle">{data.city} • Area Intelligence</span>
         </div>
         <button
-          className="report-export-btn"
+          className="ref-export-btn"
           onClick={onExportReport}
           disabled={exportLoading}
-          title="Export current view as a report"
+          title="Export current location analysis as a report"
         >
-          {exportLoading ? '⏳ Saving…' : '📄 Export Report'}
+          {exportLoading ? 'Saving…' : 'Export Report'}
         </button>
       </div>
 
-      {/* Risk Score + Key Stats */}
-      <div className="summary-hero">
+      {/* Risk Score Ring & Key Metrics */}
+      <div className="summary-ref-hero">
         <RiskScoreRing score={data.risk_score} />
-        <div className="summary-hero-stats">
-          <div className="hero-stat">
-            <span className="hero-stat-label">Total Incidents</span>
-            <span className="hero-stat-val" style={{ color: '#f56565' }}>{data.total_incidents}</span>
+        <div className="summary-ref-stats-grid">
+          <div className="ref-stat-box">
+            <span className="ref-stat-label">Total Incidents</span>
+            <span className="ref-stat-val val-incidents">{data.total_incidents.toLocaleString()}</span>
           </div>
-          <div className="hero-stat">
-            <span className="hero-stat-label">Population</span>
-            <span className="hero-stat-val">
-              {data.population_info?.total_population?.toLocaleString() ?? 'N/A'}
+          <div className="ref-stat-box">
+            <span className="ref-stat-label">Population</span>
+            <span className="ref-stat-val">
+              {data.population_info?.total_population?.toLocaleString() ?? '—'}
             </span>
           </div>
-          <div className="hero-stat">
-            <span className="hero-stat-label">Density /km²</span>
-            <span className="hero-stat-val">{data.population_info?.density ?? 'N/A'}</span>
+          <div className="ref-stat-box">
+            <span className="ref-stat-label">Density /km²</span>
+            <span className="ref-stat-val">{data.population_info?.density?.toLocaleString() ?? '—'}</span>
           </div>
-          <div className="hero-stat">
-            <span className="hero-stat-label">Growth Rate</span>
-            <span className="hero-stat-val" style={{ color: '#48bb78' }}>
+          <div className="ref-stat-box">
+            <span className="ref-stat-label">Growth Rate</span>
+            <span className="ref-stat-val val-growth">
               {data.population_info?.growth_rate != null
-                ? `${data.population_info.growth_rate}%`
-                : 'N/A'}
+                ? `+${data.population_info.growth_rate}%`
+                : '—'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Crime Trend Chart */}
-      <div className="summary-card">
-        <h3 className="summary-card-title">📈 Crime Trend (Last 6 Months)</h3>
-        <CrimeTrendChart data={trendData} loading={trendLoading} />
-      </div>
-
-      {/* Crime Breakdown */}
-      {data.crime_breakdown.length > 0 && (
-        <div className="summary-card">
-          <h3 className="summary-card-title">🔍 Crime Breakdown</h3>
-          <div className="breakdown-list">
-            {data.crime_breakdown.map(item => {
-              const pct =
-                data.total_incidents > 0
-                  ? Math.round((item.count / data.total_incidents) * 100)
-                  : 0;
+      {/* Crime Breakdown Section */}
+      {filteredCrimeBreakdown.length > 0 && (
+        <div className="summary-ref-card">
+          <div className="ref-card-header">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#f87171" strokeWidth="2" style={{ marginRight: 6 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <h3>Crime Breakdown</h3>
+          </div>
+          <div className="ref-breakdown-list">
+            {filteredCrimeBreakdown.map(item => {
+              const catColor = CATEGORY_COLORS[item.category] || '#ef4444';
+              const fillPct = (item.count / maxCrimeCount) * 100;
               return (
-                <div key={item.category} className="breakdown-item">
-                  <span className="breakdown-cat">{item.category}</span>
-                  <div className="breakdown-bar-wrap">
-                    <div className="breakdown-bar-fill" style={{ width: `${pct}%` }} />
+                <div key={item.category} className="ref-breakdown-row">
+                  <span className="ref-breakdown-name">{item.category}</span>
+                  <div className="ref-breakdown-track">
+                    <div
+                      className="ref-breakdown-fill"
+                      style={{
+                        width: `${Math.max(fillPct, 6)}%`,
+                        background: `linear-gradient(90deg, ${catColor}, ${catColor}cc)`,
+                        boxShadow: `0 0 10px ${catColor}44`,
+                      }}
+                    />
                   </div>
-                  <span className="breakdown-count">{item.count}</span>
+                  <strong className="ref-breakdown-count" style={{ color: catColor }}>
+                    {item.count}
+                  </strong>
                 </div>
               );
             })}
@@ -128,46 +153,54 @@ export default function SummaryPanel({
         </div>
       )}
 
-      {/* Infrastructure Nearby */}
-      <div className="summary-card">
-        <h3 className="summary-card-title">🏗️ Infrastructure Nearby</h3>
+      {/* Infrastructure Nearby Section */}
+      <div className="summary-ref-card">
+        <div className="ref-card-header">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#60a5fa" strokeWidth="2" style={{ marginRight: 6 }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V12a1 1 0 011-1h2a1 1 0 011 1v9" />
+          </svg>
+          <h3>Infrastructure Nearby</h3>
+        </div>
         {infraData.length === 0 ? (
-          <p className="summary-empty">No infrastructure recorded for this area.</p>
+          <p className="summary-empty-text">No infrastructure recorded for this location.</p>
         ) : (
-          <div className="infra-grid">
+          <div className="ref-infra-grid">
             {infraData.map(item => (
-              <div key={item.infra_type} className="infra-badge">
-                <span className="infra-icon">{INFRA_ICONS[item.infra_type] || '🏗️'}</span>
-                <span className="infra-label">{item.infra_type}</span>
-                <span className="infra-count">{item.count}</span>
+              <div key={item.infra_type} className="ref-infra-card">
+                <span className="ref-infra-type-name">{item.infra_type}</span>
+                <span className="ref-infra-count">{item.count}</span>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Recent Incidents */}
+      {/* Recent Incidents Section */}
       {recentIncidents.length > 0 && (
-        <div className="summary-card">
-          <h3 className="summary-card-title">⚡ Recent Incidents</h3>
-          <div className="incidents-list">
+        <div className="summary-ref-card">
+          <div className="ref-card-header">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth="2" style={{ marginRight: 6 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <h3>Recent Incidents</h3>
+          </div>
+          <div className="ref-incidents-list">
             {recentIncidents.map(inc => (
-              <div key={inc.id} className="incident-row">
-                <div className="incident-info">
-                  <span className="incident-category">{inc.category}</span>
+              <div key={inc.id} className="ref-incident-item">
+                <div className="ref-incident-details">
+                  <span className="ref-incident-cat">{inc.category}</span>
                   {inc.description && (
-                    <span className="incident-desc">
-                      {inc.description.slice(0, 60)}
-                      {inc.description.length > 60 ? '…' : ''}
+                    <span className="ref-incident-desc">
+                      {inc.description.slice(0, 64)}{inc.description.length > 64 ? '…' : ''}
                     </span>
                   )}
                 </div>
                 <span
-                  className="incident-badge"
+                  className="ref-severity-badge"
                   style={{
-                    background: `${SEVERITY_COLOR[inc.severity] ?? '#718096'}22`,
-                    color: SEVERITY_COLOR[inc.severity] ?? '#718096',
-                    border: `1px solid ${SEVERITY_COLOR[inc.severity] ?? '#718096'}44`,
+                    color: SEVERITY_COLOR[inc.severity] ?? '#a0aec0',
+                    borderColor: `${SEVERITY_COLOR[inc.severity] ?? '#a0aec0'}44`,
+                    background: `${SEVERITY_COLOR[inc.severity] ?? '#a0aec0'}15`,
                   }}
                 >
                   {inc.severity}
@@ -179,7 +212,7 @@ export default function SummaryPanel({
       )}
 
       {onSwitchToReports && (
-        <button className="switch-reports-btn" onClick={onSwitchToReports}>
+        <button className="ref-switch-reports-btn" onClick={onSwitchToReports}>
           View All Reports →
         </button>
       )}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { CrimeTrendData } from '../../types';
 
 interface Props {
@@ -6,128 +6,265 @@ interface Props {
   loading: boolean;
 }
 
-/** Maps a count relative to the max to a red shade: low = pale pink, high = deep crimson */
-function redShade(count: number, max: number): string {
-  const t = max > 0 ? count / max : 0;
-  // Lerp from pale #ffb3b3 → vivid #c93030 → deep #5a0a10
-  if (t < 0.4) {
-    // pale pink to medium red
-    const f = t / 0.4;
-    const r = Math.round(255 - f * (255 - 201));
-    const g = Math.round(179 - f * (179 - 48));
-    const b = Math.round(179 - f * (179 - 48));
-    return `rgb(${r},${g},${b})`;
-  } else {
-    // medium red to deep crimson
-    const f = (t - 0.4) / 0.6;
-    const r = Math.round(201 - f * (201 - 90));
-    const g = Math.round(48  - f * (48  - 10));
-    const b = Math.round(48  - f * (48  - 16));
-    return `rgb(${r},${g},${b})`;
-  }
-}
-
-function glowShade(count: number, max: number): string {
-  const t = max > 0 ? count / max : 0;
-  const alpha = 0.15 + t * 0.55;
-  return `rgba(201,48,48,${alpha.toFixed(2)})`;
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Theft:    '#ef4444',
-  Assault:  '#dc2626',
-  Vandalism:'#b91c1c',
-  Traffic:  '#f87171',
-  Other:    '#fca5a5',
+const CATEGORY_STYLES: Record<string, { color: string; fill: string }> = {
+  Theft:     { color: '#ef4444', fill: 'rgba(239, 68, 68, 0.12)' },
+  Assault:   { color: '#f97316', fill: 'rgba(249, 115, 22, 0.10)' },
+  Traffic:   { color: '#3b82f6', fill: 'rgba(59, 130, 246, 0.10)' },
+  Vandalism: { color: '#eab308', fill: 'rgba(234, 179, 8, 0.10)' },
+  Robbery:   { color: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.10)' },
+  Burglary:  { color: '#10b981', fill: 'rgba(16, 185, 129, 0.10)' },
 };
 
+function getSplinePath(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = p0.x + (p1.x - p0.x) / 2;
+    const cp1y = p0.y;
+    const cp2x = p0.x + (p1.x - p0.x) / 2;
+    const cp2y = p1.y;
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.y}`;
+  }
+  return d;
+}
+
 export default function CrimeTrendChart({ data, loading }: Props) {
+  const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
+
   if (loading) {
     return (
-      <div className="chart-skeleton">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="chart-bar-skeleton" style={{ height: `${30 + i * 10}%` }} />
-        ))}
+      <div className="spline-chart-loading">
+        <div className="spinner" style={{ margin: '0 auto 12px' }} />
+        <p>Loading multi-curve trend analysis…</p>
       </div>
     );
   }
 
-  const months = data?.month_totals ?? [];
+  // Filter out 'Other' category
+  const rawTrend = (data?.trend ?? []).filter(t => t.category !== 'Other');
+  const monthTotals = data?.month_totals ?? [];
 
-  if (months.length === 0) {
+  if (monthTotals.length === 0) {
     return (
-      <div className="chart-empty">
-        <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="rgba(201,107,107,0.4)" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      <div className="spline-chart-empty">
+        <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
-        <p>No incident data for this period</p>
+        <p>No crime trend records available for this location.</p>
       </div>
     );
   }
 
-  const maxVal = Math.max(...months.map(m => m.total), 1);
+  // Extract unique categories and months
+  const categories = Array.from(new Set(rawTrend.map(t => t.category)));
+  const months = monthTotals.map(m => m.month).filter(Boolean) as string[];
 
-  // Also build per-month per-category breakdown for stacked display
-  const categorySet = Array.from(new Set(data?.trend.map(t => t.category) ?? []));
+  // Chart SVG dimensions
+  const svgWidth = 680;
+  const svgHeight = 240;
+  const paddingLeft = 45;
+  const paddingRight = 25;
+  const paddingTop = 25;
+  const paddingBottom = 35;
+
+  const chartW = svgWidth - paddingLeft - paddingRight;
+  const chartH = svgHeight - paddingTop - paddingBottom;
+
+  // Max value calculation across category counts
+  let maxCount = 10;
+  rawTrend.forEach(t => {
+    if (t.count > maxCount) maxCount = t.count;
+  });
+  maxCount = Math.ceil(maxCount * 1.15); // Add top padding
+
+  // Build coordinate mapping per category
+  const categoryCurves = categories.map(cat => {
+    const points = months.map((m, idx) => {
+      const entry = rawTrend.find(t => t.month === m && t.category === cat);
+      const count = entry ? entry.count : 0;
+
+      const x = paddingLeft + (months.length > 1 ? (idx / (months.length - 1)) * chartW : chartW / 2);
+      const y = paddingTop + chartH - (count / maxCount) * chartH;
+
+      return { x, y, count, month: m, category: cat };
+    });
+
+    const pathD = getSplinePath(points);
+    const style = CATEGORY_STYLES[cat] || { color: '#a855f7', fill: 'rgba(168, 85, 247, 0.1)' };
+
+    return { cat, points, pathD, style };
+  });
+
+  // Month X positions for vertical highlight band
+  const monthXPositions = months.map((_, idx) =>
+    paddingLeft + (months.length > 1 ? (idx / (months.length - 1)) * chartW : chartW / 2)
+  );
+
+  const activeIdx = hoveredMonthIdx !== null ? hoveredMonthIdx : months.length - 1;
+  const activeMonthStr = months[activeIdx]
+    ? new Date(months[activeIdx] + '-01').toLocaleString('default', { month: 'short', year: '2-digit' })
+    : '';
 
   return (
-    <div className="crime-trend-chart">
-      <div className="trend-bars">
-        {months.map(m => {
-          const pct = (m.total / maxVal) * 100;
-          const fill = redShade(m.total, maxVal);
-          const glow = glowShade(m.total, maxVal);
-          const monthLabel = m.month
-            ? new Date(m.month + '-01').toLocaleString('default', { month: 'short' })
-            : '?';
-
-          return (
-            <div key={m.month} className="trend-bar-col">
-              <span className="trend-bar-val">{m.total}</span>
-              <div className="trend-bar-wrap">
-                <div
-                  className="trend-bar-fill"
-                  style={{
-                    height: `${Math.max(pct, 4)}%`,
-                    background: `linear-gradient(180deg, ${fill} 0%, #3f0610 100%)`,
-                    boxShadow: `0 0 12px ${glow}, 0 4px 20px ${glow}`,
-                  }}
-                  title={`${monthLabel}: ${m.total} total incidents`}
-                />
-              </div>
-              <span className="trend-bar-label">{monthLabel}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Category intensity legend */}
-      {categorySet.length > 0 && (
-        <div className="trend-legend">
-          {categorySet.map(cat => {
-            const total = data?.trend
-              .filter(t => t.category === cat)
-              .reduce((s, t) => s + t.count, 0) ?? 0;
-            const maxCat = Math.max(
-              ...(data?.trend.map(t => t.count) ?? [1]), 1
-            );
-            const shade = redShade(total / categorySet.length, maxCat);
+    <div className="spline-chart-container fade-in">
+      {/* Header matching Screenshot 1 */}
+      <div className="spline-chart-header">
+        <div>
+          <h4 className="spline-chart-title">Incident Trend Over Time</h4>
+          <span className="spline-chart-subtitle">6 Months Comparative Category Curves</span>
+        </div>
+        <div className="spline-legend">
+          {categories.map(cat => {
+            const style = CATEGORY_STYLES[cat] || { color: '#a855f7' };
             return (
-              <span key={cat} className="legend-item">
-                <span className="legend-dot" style={{ background: CATEGORY_COLORS[cat] ?? shade }} />
+              <span key={cat} className="spline-legend-item">
+                <span className="spline-legend-dot" style={{ background: style.color }} />
                 {cat}
-                <span className="legend-count">({total})</span>
               </span>
             );
           })}
         </div>
-      )}
+      </div>
 
-      {/* Intensity scale hint */}
-      <div className="trend-intensity-bar">
-        <span className="intensity-label">Low</span>
-        <div className="intensity-gradient" />
-        <span className="intensity-label">High</span>
+      {/* SVG Multi-Line Curved Chart */}
+      <div className="spline-svg-wrapper">
+        <svg
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+          className="spline-svg"
+          onMouseLeave={() => setHoveredMonthIdx(null)}
+        >
+          {/* Y-Axis Horizontal Grid Lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+            const y = paddingTop + chartH * (1 - ratio);
+            const val = Math.round(maxCount * ratio);
+            return (
+              <g key={i} className="spline-grid-group">
+                <line
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={svgWidth - paddingRight}
+                  y2={y}
+                  stroke="rgba(255, 255, 255, 0.07)"
+                  strokeDasharray="4 4"
+                />
+                <text
+                  x={paddingLeft - 8}
+                  y={y + 4}
+                  fill="#718096"
+                  fontSize="11"
+                  textAnchor="end"
+                  fontFamily="Inter, sans-serif"
+                >
+                  {val}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Active Hover Month Vertical Highlight Band (Matching Screenshot 1) */}
+          {activeIdx !== null && monthXPositions[activeIdx] !== undefined && (
+            <rect
+              x={monthXPositions[activeIdx] - 25}
+              y={paddingTop}
+              width={50}
+              height={chartH}
+              fill="rgba(255, 255, 255, 0.05)"
+              rx={6}
+            />
+          )}
+
+          {/* Smooth Category Spline Curves */}
+          {categoryCurves.map(curve => (
+            <g key={curve.cat}>
+              {/* Curve Line */}
+              <path
+                d={curve.pathD}
+                fill="none"
+                stroke={curve.style.color}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                style={{ filter: `drop-shadow(0 2px 8px ${curve.style.color}66)` }}
+              />
+
+              {/* Data Points */}
+              {curve.points.map((pt, pIdx) => {
+                const isActive = pIdx === activeIdx;
+                return (
+                  <circle
+                    key={pIdx}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isActive ? 5.5 : 3.5}
+                    fill={isActive ? '#ffffff' : curve.style.color}
+                    stroke={curve.style.color}
+                    strokeWidth={isActive ? 2.5 : 1.5}
+                    className="spline-point"
+                    onMouseEnter={() => setHoveredMonthIdx(pIdx)}
+                  />
+                );
+              })}
+            </g>
+          ))}
+
+          {/* X-Axis Date Labels */}
+          {months.map((m, idx) => {
+            const x = monthXPositions[idx];
+            const dateLabel = m
+              ? new Date(m + '-01').toLocaleString('default', { month: 'short' })
+              : '';
+            const isActive = idx === activeIdx;
+
+            return (
+              <g
+                key={m}
+                onClick={() => setHoveredMonthIdx(idx)}
+                onMouseEnter={() => setHoveredMonthIdx(idx)}
+                style={{ cursor: 'pointer' }}
+              >
+                <text
+                  x={x}
+                  y={svgHeight - 8}
+                  fill={isActive ? '#f7fafc' : '#718096'}
+                  fontSize="11"
+                  fontWeight={isActive ? '700' : '500'}
+                  textAnchor="middle"
+                  fontFamily="Inter, sans-serif"
+                >
+                  {dateLabel}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Interactive Floating Tooltip (Matching Screenshot 1 Box) */}
+        {activeIdx !== null && monthXPositions[activeIdx] !== undefined && (
+          <div
+            className="spline-tooltip-box fade-in"
+            style={{
+              left: `${(monthXPositions[activeIdx] / svgWidth) * 100}%`,
+            }}
+          >
+            <div className="spline-tooltip-header">{activeMonthStr}</div>
+            <div className="spline-tooltip-rows">
+              {categoryCurves.map(curve => {
+                const pt = curve.points[activeIdx];
+                if (!pt || pt.count === 0) return null;
+                return (
+                  <div key={curve.cat} className="spline-tooltip-row">
+                    <span className="tooltip-dot" style={{ background: curve.style.color }} />
+                    <span className="tooltip-cat">{curve.cat}:</span>
+                    <strong className="tooltip-val" style={{ color: curve.style.color }}>{pt.count}</strong>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

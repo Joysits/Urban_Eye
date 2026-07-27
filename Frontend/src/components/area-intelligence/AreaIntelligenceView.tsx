@@ -6,11 +6,13 @@ import type {
 import MapPanel from './MapPanel';
 import SummaryPanel from './SummaryPanel';
 import ComparisonMode from './ComparisonMode';
+import CrimeTrendChart from './CrimeTrendChart';
 
-interface Props {
-  currentCity: string;
-  onSwitchToReports?: () => void;
-}
+const CITY_CENTERS_MAP: Record<string, [number, number]> = {
+  Nairobi: [-1.286389, 36.817223],
+  Mombasa: [-4.043477, 39.668206],
+  Eldoret: [0.514277, 35.26978],
+};
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   Low: 0.3, Moderate: 0.6, High: 1.0, Critical: 1.0,
@@ -24,170 +26,208 @@ function authHeaders() {
   };
 }
 
-export default function AreaIntelligenceView({ currentCity, onSwitchToReports }: Props) {
-  const [city, setCity] = useState(currentCity);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [selectedZone, setSelectedZone] = useState('');
-  const [selectionMode, setSelectionMode] = useState<'zone' | 'pin'>('zone');
-  const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [radiusKm, setRadiusKm] = useState(5);
-  const [compareMode, setCompareMode] = useState(false);
-  const [zoneAId, setZoneAId] = useState('');
-  const [zoneBId, setZoneBId] = useState('');
+interface Props {
+  currentCity: string;
+  onSwitchToReports?: () => void;
+}
 
-  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [trendData, setTrendData] = useState<CrimeTrendData | null>(null);
-  const [infraNearby, setInfraNearby] = useState<InfrastructureNearby | null>(null);
+export default function AreaIntelligenceView({ currentCity, onSwitchToReports }: Props) {
+  const [city, setCity] = useState(currentCity || 'Nairobi');
+  const [selectionMode, setSelectionMode] = useState<'zone' | 'pin'>('zone');
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [droppedPin, setDroppedPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [radiusKm, setRadiusKm] = useState<number>(5);
+  const [compareMode, setCompareMode] = useState(false);
+
+  // Compare mode selections
+  const [zoneAId, setZoneAId] = useState<string>('');
+  const [zoneBId, setZoneBId] = useState<string>('');
   const [zoneAData, setZoneAData] = useState<AnalysisData | null>(null);
   const [zoneBData, setZoneBData] = useState<AnalysisData | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [trendLoading, setTrendLoading] = useState(false);
+  // Core data states
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [trendData, setTrendData] = useState<CrimeTrendData | null>(null);
+  const [infraNearby, setInfraNearby] = useState<InfrastructureNearby | null>(null);
+  const [incidentPoints, setIncidentPoints] = useState<IncidentPoint[]>([]);
+
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [trendLoading, setTrendLoading] = useState(true);
   const [compLoading, setCompLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const [incidentPoints, setIncidentPoints] = useState<IncidentPoint[]>([]);
-  const [infraMapMarkers, setInfraMapMarkers] = useState<
-    Array<{ lat: number; lng: number; type: string; name: string }>
-  >([]);
+  const prevCityRef = useRef(city);
 
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type });
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
-  }, []);
+    setTimeout(() => setToast(null), 4000);
+  };
 
-  // Fetch zones on city change
+  // Reset location selection when city changes
   useEffect(() => {
-    setSelectedZone('');
-    setDroppedPin(null);
+    if (prevCityRef.current !== city) {
+      setSelectedZone('');
+      setDroppedPin(null);
+      setZoneAId('');
+      setZoneBId('');
+      prevCityRef.current = city;
+    }
+  }, [city]);
+
+  // Load Locations for active city
+  useEffect(() => {
     fetch(`/api/zones/?city=${encodeURIComponent(city)}`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : {})
-      .then((d: unknown) => {
-        const data = d as Record<string, unknown>;
-        // Handle both plain list and GeoJSON FeatureCollection
-        const list: Zone[] = Array.isArray(data)
-          ? (data as Zone[])
-          : ((data.results as Zone[] | undefined) ??
-              ((data.features as Array<{ properties: Zone; geometry: Zone['geometry'] }> | undefined)
-                ?.map(f => ({ ...f.properties, geometry: f.geometry })) ?? []));
+      .then(r => r.json())
+      .then(data => {
+        const rawList = Array.isArray(data)
+          ? data
+          : (data.features ?? data.results ?? []);
+
+        const list: Zone[] = rawList.map((item: Record<string, unknown>) => {
+          if (item.properties && typeof item.properties === 'object') {
+            const props = item.properties as Record<string, string>;
+            const geom = item.geometry as Zone['geometry'];
+            return {
+              id: Number(item.id),
+              name: props.name || `Location #${item.id}`,
+              city: props.city || city,
+              geometry: geom,
+            };
+          }
+          return item as unknown as Zone;
+        });
+
         setZones(list);
       })
       .catch(() => setZones([]));
   }, [city]);
 
-  // Fetch incidents for heatmap
-  useEffect(() => {
-    const q = selectedZone
-      ? `/api/incidents/?city=${encodeURIComponent(city)}&zone_id=${selectedZone}`
-      : `/api/incidents/?city=${encodeURIComponent(city)}`;
-    fetch(q, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : {})
-      .then((d: unknown) => {
-        type RawFeature = {
-          id: number;
-          geometry?: { coordinates: number[] };
-          properties?: { severity?: string; category?: string };
-        };
-        const data = d as Record<string, unknown>;
-        const features: RawFeature[] = (data.features as RawFeature[] | undefined) ?? (data.results as RawFeature[] | undefined) ?? [];
-        const pts: IncidentPoint[] = features
-          .filter(f => f.geometry?.coordinates?.length === 2)
-          .map(f => ({
-            id: f.id,
-            lat: f.geometry!.coordinates[1],
-            lng: f.geometry!.coordinates[0],
-            intensity: SEVERITY_WEIGHT[f.properties?.severity ?? 'Moderate'] ?? 0.6,
-            category: f.properties?.category ?? 'Other',
-            severity: f.properties?.severity ?? 'Moderate',
-          }));
-        setIncidentPoints(pts);
-      })
-      .catch(() => setIncidentPoints([]));
-  }, [city, selectedZone]);
-
-  // Fetch infrastructure map markers
-  useEffect(() => {
-    fetch(`/api/infrastructure/?city=${encodeURIComponent(city)}`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : {})
-      .then((d: unknown) => {
-        type RawInfra = {
-          geometry?: { coordinates: number[] };
-          properties?: { infra_type?: string; name?: string };
-        };
-        const data = d as Record<string, unknown>;
-        const features: RawInfra[] = (data.features as RawInfra[] | undefined) ?? (data.results as RawInfra[] | undefined) ?? [];
-        setInfraMapMarkers(
-          features
-            .filter(f => f.geometry?.coordinates?.length === 2)
-            .map(f => ({
-              lat: f.geometry!.coordinates[1],
-              lng: f.geometry!.coordinates[0],
-              type: f.properties?.infra_type ?? 'Other',
-              name: f.properties?.name ?? 'Infrastructure',
-            }))
-        );
-      })
-      .catch(() => setInfraMapMarkers([]));
-  }, [city]);
-
-  // Fetch main analysis data
-  useEffect(() => {
+  // Fetch Area Analysis Detail
+  const fetchAnalysis = useCallback(async () => {
     setLoading(true);
-    let url = `/api/analysis/detail/?city=${encodeURIComponent(city)}`;
-    if (selectedZone) url += `&zone_id=${selectedZone}`;
-    fetch(url, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => setAnalysisData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    try {
+      let url = `/api/analysis/detail/?city=${encodeURIComponent(city)}`;
+      if (selectedZone) url += `&zone_id=${selectedZone}`;
+
+      const res = await fetch(url, { headers: authHeaders() });
+      const data: AnalysisData = await res.json();
+      setAnalysisData(data);
+    } catch {
+      showToast('Failed to load area analysis data.', 'error');
+    } finally {
+      setLoading(false);
+    }
   }, [city, selectedZone]);
 
-  // Fetch 6-month crime trend
-  useEffect(() => {
+  // Fetch Crime Trend
+  const fetchTrend = useCallback(async () => {
     setTrendLoading(true);
-    let url = `/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&months=6`;
-    if (selectedZone) url += `&zone_id=${selectedZone}`;
-    fetch(url, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => setTrendData(d))
-      .catch(() => {})
-      .finally(() => setTrendLoading(false));
+    try {
+      let url = `/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&months=6`;
+      if (selectedZone) url += `&zone_id=${selectedZone}`;
+
+      const res = await fetch(url, { headers: authHeaders() });
+      const data: CrimeTrendData = await res.json();
+      setTrendData(data);
+    } catch {
+      setTrendData(null);
+    } finally {
+      setTrendLoading(false);
+    }
   }, [city, selectedZone]);
 
-  // Fetch infrastructure nearby when pin is dropped
+  // Fetch Infrastructure Nearby (pin mode)
   useEffect(() => {
-    if (!droppedPin) return;
+    if (selectionMode !== 'pin' || !droppedPin) {
+      setInfraNearby(null);
+      return;
+    }
     const url = `/api/analysis/infrastructure-nearby/?city=${encodeURIComponent(city)}&lat=${droppedPin.lat}&lng=${droppedPin.lng}&radius_km=${radiusKm}`;
     fetch(url, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setInfraNearby(d))
-      .catch(() => {});
-  }, [droppedPin, radiusKm, city]);
+      .catch(() => setInfraNearby(null));
+  }, [selectionMode, droppedPin, radiusKm, city]);
 
-  // Fetch comparison zone data
+  // Fetch Incidents for map heat layer & markers
+  useEffect(() => {
+    let url = `/api/incidents/?city=${encodeURIComponent(city)}`;
+    if (selectedZone) url += `&zone_id=${selectedZone}`;
+
+    fetch(url, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(data => {
+        const rawList = Array.isArray(data) ? data : data.results ?? [];
+
+        const parsed: IncidentPoint[] = rawList
+          .map((inc: Record<string, unknown>) => {
+            const geom = inc.geometry as { coordinates: [number, number] } | undefined;
+            const props = (inc.properties as Record<string, string>) ?? {};
+            const lat = geom ? geom.coordinates[1] : Number(inc.latitude || inc.lat || 0);
+            const lng = geom ? geom.coordinates[0] : Number(inc.longitude || inc.lng || 0);
+            const severity = props.severity ?? (inc.severity as string) ?? 'Moderate';
+            const category = props.category ?? (inc.category as string) ?? 'Other';
+            const intensity = SEVERITY_WEIGHT[severity] ?? 0.5;
+
+            return { id: Number(inc.id), lat, lng, intensity, category, severity };
+          })
+          .filter((p: IncidentPoint) => p.lat !== 0 && p.lng !== 0 && !isNaN(p.lat) && !isNaN(p.lng));
+
+        setIncidentPoints(parsed);
+      })
+      .catch(() => setIncidentPoints([]));
+  }, [city, selectedZone]);
+
+  // Trigger analysis data load
+  useEffect(() => {
+    fetchAnalysis();
+    fetchTrend();
+  }, [fetchAnalysis, fetchTrend]);
+
+  // Comparison mode fetch
   useEffect(() => {
     if (!compareMode) return;
     setCompLoading(true);
-    const fetchZone = (id: string): Promise<AnalysisData | null> =>
-      id
-        ? fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${id}`, {
-            headers: authHeaders(),
-          }).then(r => r.json())
-        : Promise.resolve(null);
-    Promise.all([fetchZone(zoneAId), fetchZone(zoneBId)])
-      .then(([a, b]) => { setZoneAData(a); setZoneBData(b); })
-      .catch(() => {})
+
+    const fetchSingleZone = (zId: string) => {
+      if (!zId) return Promise.resolve(null);
+      return fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${zId}`, {
+        headers: authHeaders(),
+      }).then(r => r.json());
+    };
+
+    Promise.all([fetchSingleZone(zoneAId), fetchSingleZone(zoneBId)])
+      .then(([a, b]) => {
+        setZoneAData(a);
+        setZoneBData(b);
+      })
+      .catch(() => {
+        setZoneAData(null);
+        setZoneBData(null);
+      })
       .finally(() => setCompLoading(false));
   }, [compareMode, zoneAId, zoneBId, city]);
 
-  const handlePinDrop = useCallback((lat: number, lng: number) => {
+  const handlePinDrop = (lat: number, lng: number) => {
     setDroppedPin({ lat, lng });
-    setSelectedZone('');
-    setInfraNearby(null);
-  }, []);
+    showToast(`Pin dropped at ${lat.toFixed(4)}, ${lng.toFixed(4)}`, 'success');
+  };
+
+  // Convert infrastructure summary to map markers
+  const infraMapMarkers = (analysisData?.infrastructure_summary ?? []).map((inf, idx) => {
+    const typeStr = inf.type || 'Infrastructure';
+    const center = CITY_CENTERS_MAP[city] ?? [-1.286389, 36.817223];
+    return {
+      id: idx,
+      infra_type: typeStr,
+      name: `${typeStr} (${inf.count})`,
+      lat: center[0] + (Math.random() - 0.5) * 0.04,
+      lng: center[1] + (Math.random() - 0.5) * 0.04,
+    };
+  });
 
   const handleExportReport = async () => {
     if (!analysisData) return;
@@ -237,7 +277,7 @@ export default function AreaIntelligenceView({ currentCity, onSwitchToReports }:
                 className={`mode-btn${selectionMode === 'zone' ? ' active' : ''}`}
                 onClick={() => { setSelectionMode('zone'); setDroppedPin(null); }}
               >
-                🗂 Zone
+                🗂 Location
               </button>
               <button
                 className={`mode-btn${selectionMode === 'pin' ? ' active' : ''}`}
@@ -250,13 +290,13 @@ export default function AreaIntelligenceView({ currentCity, onSwitchToReports }:
 
           {selectionMode === 'zone' && (
             <div className="intel-control-group">
-              <label>Zone / Sector</label>
+              <label>Location / Sector</label>
               <select
                 value={selectedZone}
                 onChange={e => setSelectedZone(e.target.value)}
                 className="intel-select"
               >
-                <option value="">All Zones</option>
+                <option value="">All Locations</option>
                 {zones.map(z => (
                   <option key={z.id} value={String(z.id)}>{z.name}</option>
                 ))}
@@ -285,7 +325,7 @@ export default function AreaIntelligenceView({ currentCity, onSwitchToReports }:
             className={`compare-btn${compareMode ? ' compare-btn-active' : ''}`}
             onClick={() => setCompareMode(!compareMode)}
           >
-            {compareMode ? '✖ Exit Compare' : '⚖ Compare Zones'}
+            {compareMode ? '✖ Exit Compare' : '⚖ Compare Locations'}
           </button>
         </div>
       </div>
@@ -317,23 +357,35 @@ export default function AreaIntelligenceView({ currentCity, onSwitchToReports }:
         />
       ) : (
         <div className="intel-main">
-          <MapPanel
-            city={city}
-            selectedZone={selectedZone}
-            zones={zones}
-            incidents={incidentPoints}
-            infraMarkers={infraMapMarkers}
-            onPinDrop={handlePinDrop}
-            pinMode={selectionMode === 'pin'}
-            droppedPin={droppedPin}
-            radiusKm={radiusKm}
-          />
+          {/* Left Column: Map + Crime Trend Graph placed right below it */}
+          <div className="intel-left-section">
+            <MapPanel
+              city={city}
+              selectedZone={selectedZone}
+              zones={zones}
+              incidents={incidentPoints}
+              infraMarkers={infraMapMarkers}
+              onPinDrop={handlePinDrop}
+              pinMode={selectionMode === 'pin'}
+              droppedPin={droppedPin}
+              radiusKm={radiusKm}
+            />
+
+            {/* Crime Trend Chart Card directly below Map */}
+            <div className="map-bottom-chart-card">
+              <div className="mbc-header">
+                <h3>📈 Crime Trend (Last 6 Months)</h3>
+                <span className="mbc-sub">{analysisData?.zone_name || city}</span>
+              </div>
+              <CrimeTrendChart data={trendData} loading={trendLoading} />
+            </div>
+          </div>
+
+          {/* Right Column: Detailed Intelligence Summary Panel */}
           <SummaryPanel
             data={analysisData}
-            trendData={trendData}
             infraNearby={infraNearby}
             loading={loading}
-            trendLoading={trendLoading}
             onExportReport={handleExportReport}
             exportLoading={exportLoading}
             onSwitchToReports={onSwitchToReports}

@@ -17,9 +17,10 @@ interface LayerState {
 }
 
 interface InfraMarker {
+  id: number;
   lat: number;
   lng: number;
-  type: string;
+  infra_type: string;
   name: string;
 }
 
@@ -48,11 +49,20 @@ function makeInfraIcon(type: string): L.DivIcon {
   });
 }
 
-// Typed access to heatLayer (augmented by leaflet.heat import)
-type HeatLayerFn = (
-  pts: [number, number, number][],
-  opts: object
-) => L.Layer;
+const TILE_PRESETS: Record<string, { url: string; subdomains?: string; maxZoom: number }> = {
+  'OSM Buildings': {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maxZoom: 19,
+  },
+  'Esri Streets': {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 19,
+  },
+  'Carto Voyager': {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    maxZoom: 19,
+  },
+};
 
 export default function MapPanel({
   city, selectedZone, zones, incidents, infraMarkers,
@@ -60,30 +70,34 @@ export default function MapPanel({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const heatRef = useRef<L.Layer | null>(null);
-  const infraLayerRef = useRef<L.LayerGroup | null>(null);
-  const zoneLayerRef = useRef<L.LayerGroup | null>(null);
+  const heatLayerRef = useRef<L.Layer | null>(null);
+  const zoneLayersRef = useRef<L.Polygon[]>([]);
+  const infraMarkersRef = useRef<L.Marker[]>([]);
   const pinMarkerRef = useRef<L.Marker | null>(null);
-  const pinCircleRef = useRef<L.Circle | null>(null);
+  const radiusCircleRef = useRef<L.Circle | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
 
   const [layers, setLayers] = useState<LayerState>({ heatmap: true, infrastructure: true, zones: true });
+  const [tilePreset, setTilePreset] = useState<string>('OSM Buildings');
 
   // Initialize map once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const center = CITY_CENTERS[city] ?? [-1.286389, 36.817223];
-    mapRef.current = L.map(containerRef.current, {
+    const map = L.map(containerRef.current, {
       center,
-      zoom: 13,
+      zoom: 14,
+      maxZoom: 19,
       zoomControl: true,
       attributionControl: false,
     });
-    // Normal Google Maps-style tile (Carto Voyager)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '\u00a9 OpenStreetMap \u00a9 CARTO',
-    }).addTo(mapRef.current);
+    mapRef.current = map;
 
+    // Default tile layer
+    const preset = TILE_PRESETS['OSM Buildings'];
+    tileLayerRef.current = L.tileLayer(preset.url, {
+      maxZoom: preset.maxZoom,
+    }).addTo(map);
 
     return () => {
       mapRef.current?.remove();
@@ -91,6 +105,16 @@ export default function MapPanel({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Update Tile Layer Preset
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const preset = TILE_PRESETS[tilePreset] || TILE_PRESETS['OSM Buildings'];
+    if (tileLayerRef.current) {
+      mapRef.current.removeLayer(tileLayerRef.current);
+    }
+    tileLayerRef.current = L.tileLayer(preset.url, { maxZoom: preset.maxZoom }).addTo(mapRef.current);
+  }, [tilePreset]);
 
   // Recenter on city change
   useEffect(() => {
@@ -109,128 +133,174 @@ export default function MapPanel({
     return () => { map.off('click', handler); };
   }, [pinMode, onPinDrop]);
 
-  // Cursor crosshair in pin mode
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.style.cursor = pinMode ? 'crosshair' : '';
-    }
-  }, [pinMode]);
-
-  // Heatmap layer
+  // Handle Heatmap Layer
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
+
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
+
     if (layers.heatmap && incidents.length > 0) {
-      const pts: [number, number, number][] = incidents.map(i => [i.lat, i.lng, i.intensity]);
-      const heatFn = (L as unknown as { heatLayer: HeatLayerFn }).heatLayer;
-      heatRef.current = heatFn(pts, {
-        radius: 28,
-        blur: 20,
-        maxZoom: 17,
-        gradient: { 0.2: '#1a0a3b', 0.4: '#7c1d24', 0.6: '#c96b6b', 0.8: '#ed8936', 1.0: '#fff5b4' },
-      });
-      heatRef.current.addTo(map);
+      const heatPoints: L.HeatLatLng[] = incidents.map(p => [p.lat, p.lng, p.intensity]);
+      try {
+        const hLayer = L.heatLayer(heatPoints, {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          gradient: {
+            0.2: '#3b82f6',
+            0.4: '#10b981',
+            0.6: '#f59e0b',
+            0.8: '#f97316',
+            1.0: '#ef4444',
+          },
+        });
+        hLayer.addTo(map);
+        heatLayerRef.current = hLayer;
+      } catch {
+        // Fallback if heatLayer library fails
+      }
     }
-  }, [incidents, layers.heatmap]);
+  }, [layers.heatmap, incidents]);
 
-  // Infrastructure markers
+  // Handle Location Boundary Polygons
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (infraLayerRef.current) { map.removeLayer(infraLayerRef.current); infraLayerRef.current = null; }
-    if (layers.infrastructure && infraMarkers.length > 0) {
-      infraLayerRef.current = L.layerGroup();
-      infraMarkers.forEach(m => {
-        L.marker([m.lat, m.lng], { icon: makeInfraIcon(m.type) })
-          .bindPopup(`<div style="color:#1a202c"><strong>${m.name}</strong><br/><em>${m.type}</em></div>`)
-          .addTo(infraLayerRef.current!);
-      });
-      infraLayerRef.current.addTo(map);
-    }
-  }, [infraMarkers, layers.infrastructure]);
 
-  // Zone polygon overlays
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (zoneLayerRef.current) { map.removeLayer(zoneLayerRef.current); zoneLayerRef.current = null; }
+    zoneLayersRef.current.forEach(layer => map.removeLayer(layer));
+    zoneLayersRef.current = [];
+
     if (layers.zones && zones.length > 0) {
-      zoneLayerRef.current = L.layerGroup();
       zones.forEach(z => {
-        if (!z.geometry) return;
-        try {
-          const geoLayer = L.geoJSON(z.geometry as Parameters<typeof L.geoJSON>[0], {
-            style: {
-              color: z.id === Number(selectedZone) ? '#c96b6b' : 'rgba(201,107,107,0.5)',
-              weight: z.id === Number(selectedZone) ? 2.5 : 1,
-              fillColor: z.id === Number(selectedZone) ? 'rgba(201,107,107,0.15)' : 'transparent',
-              fillOpacity: 1,
-            },
-          });
-          geoLayer.bindTooltip(z.name, {
-            permanent: false,
-            direction: 'center',
-            className: 'zone-tooltip',
-          });
-          geoLayer.addTo(zoneLayerRef.current!);
-        } catch (_) { /* skip invalid geometries */ }
-      });
-      zoneLayerRef.current.addTo(map);
-    }
-  }, [zones, layers.zones, selectedZone]);
+        if (!z.geometry || z.geometry.type !== 'Polygon') return;
+        const rawCoords = z.geometry.coordinates[0];
+        const latLngs: L.LatLngTuple[] = rawCoords.map(c => [c[1], c[0]]);
 
-  // Dropped pin + radius circle
+        const isSelected = selectedZone === String(z.id);
+        const poly = L.polygon(latLngs, {
+          color: isSelected ? '#ef4444' : '#3b82f6',
+          weight: isSelected ? 3 : 1.5,
+          fillColor: isSelected ? '#ef4444' : '#3b82f6',
+          fillOpacity: isSelected ? 0.25 : 0.08,
+          dashArray: isSelected ? undefined : '4, 4',
+        });
+
+        poly.bindPopup(`<strong>${z.name}</strong><br/>City: ${z.city}`);
+        poly.addTo(map);
+        zoneLayersRef.current.push(poly);
+
+        if (isSelected) {
+          map.flyToBounds(poly.getBounds(), { padding: [40, 40], duration: 1.0 });
+        }
+      });
+    }
+  }, [layers.zones, zones, selectedZone]);
+
+  // Handle Infrastructure Markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    infraMarkersRef.current.forEach(m => map.removeLayer(m));
+    infraMarkersRef.current = [];
+
+    if (layers.infrastructure && infraMarkers.length > 0) {
+      infraMarkers.forEach(inf => {
+        const marker = L.marker([inf.lat, inf.lng], { icon: makeInfraIcon(inf.infra_type) });
+        marker.bindPopup(`<strong>${inf.name}</strong><br/>Type: ${inf.infra_type}`);
+        marker.addTo(map);
+        infraMarkersRef.current.push(marker);
+      });
+    }
+  }, [layers.infrastructure, infraMarkers]);
+
+  // Handle Dropped Pin & Radius Circle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
     if (pinMarkerRef.current) { map.removeLayer(pinMarkerRef.current); pinMarkerRef.current = null; }
-    if (pinCircleRef.current) { map.removeLayer(pinCircleRef.current); pinCircleRef.current = null; }
+    if (radiusCircleRef.current) { map.removeLayer(radiusCircleRef.current); radiusCircleRef.current = null; }
+
     if (droppedPin) {
-      pinMarkerRef.current = L.marker([droppedPin.lat, droppedPin.lng], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="width:14px;height:14px;background:#c96b6b;border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px #c96b6b;"></div>',
-          iconSize: [14, 14],
-          iconAnchor: [7, 7],
-        }),
-      }).addTo(map);
-      pinCircleRef.current = L.circle([droppedPin.lat, droppedPin.lng], {
+      const pinIcon = L.divIcon({
+        className: '',
+        html: '<div style="font-size:24px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.8));">📍</div>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+      });
+      const pMarker = L.marker([droppedPin.lat, droppedPin.lng], { icon: pinIcon });
+      pMarker.addTo(map);
+      pinMarkerRef.current = pMarker;
+
+      const circle = L.circle([droppedPin.lat, droppedPin.lng], {
         radius: radiusKm * 1000,
-        color: '#c96b6b',
-        weight: 1.5,
-        fillColor: 'rgba(201,107,107,0.08)',
-        fillOpacity: 1,
-        dashArray: '6 4',
-      }).addTo(map);
+        color: '#ef4444',
+        weight: 2,
+        fillColor: '#ef4444',
+        fillOpacity: 0.12,
+      });
+      circle.addTo(map);
+      radiusCircleRef.current = circle;
+
+      map.flyToBounds(circle.getBounds(), { padding: [30, 30], duration: 0.8 });
     }
   }, [droppedPin, radiusKm]);
 
-  const toggleLayer = (key: keyof LayerState) =>
+  const toggleLayer = (key: keyof LayerState) => {
     setLayers(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="map-panel">
-      {/* Floating layer toggles */}
-      <div className="layer-toggle-bar">
-        {(['heatmap', 'infrastructure', 'zones'] as const).map(key => (
+      {/* Clean Floating Map Control Overlay */}
+      <div className="map-overlay-controls">
+        <div className="map-layer-pills">
           <button
-            key={key}
-            className={`layer-btn ${layers[key] ? 'layer-btn-active' : ''}`}
-            onClick={() => toggleLayer(key)}
+            className={`map-pill-btn${layers.heatmap ? ' pill-active-heat' : ''}`}
+            onClick={() => toggleLayer('heatmap')}
           >
-            {key === 'heatmap' && '🔥'}
-            {key === 'infrastructure' && '🏗️'}
-            {key === 'zones' && '🗺️'}
-            {' '}{key.charAt(0).toUpperCase() + key.slice(1)}
+            🔥 Heatmap ({incidents.length})
           </button>
-        ))}
-        {pinMode && (
-          <span style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#ed8936', fontWeight: 600 }}>
-            📍 Click map to drop pin
-          </span>
-        )}
+          <button
+            className={`map-pill-btn${layers.infrastructure ? ' pill-active-infra' : ''}`}
+            onClick={() => toggleLayer('infrastructure')}
+          >
+            🏗️ Infrastructure
+          </button>
+          <button
+            className={`map-pill-btn${layers.zones ? ' pill-active-zones' : ''}`}
+            onClick={() => toggleLayer('zones')}
+          >
+            🗺️ Locations ({zones.length})
+          </button>
+        </div>
+
+        {/* Map Tile Detail Selector */}
+        <div className="map-tile-selector">
+          <select
+            value={tilePreset}
+            onChange={e => setTilePreset(e.target.value)}
+            className="map-tile-select"
+            title="Switch Map Tile Detail Style"
+          >
+            <option value="OSM Buildings">🏢 Buildings & POIs (OSM)</option>
+            <option value="Esri Streets">🛣️ Detailed Streets (Esri)</option>
+            <option value="Carto Voyager">🗺️ Carto Voyager</option>
+          </select>
+        </div>
       </div>
+
+      {pinMode && (
+        <div className="pin-mode-banner">
+          📍 PIN DROP MODE ACTIVE — Click anywhere on the map to analyze radius
+        </div>
+      )}
+
       <div ref={containerRef} className="leaflet-map-container" />
     </div>
   );
