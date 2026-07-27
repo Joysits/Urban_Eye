@@ -187,18 +187,20 @@ class AreaAnalysisDetailView(APIView):
             else:
                 incidents_qs = incidents_qs.filter(zone__in=city_zones)
 
-            # 3. Query Infrastructure
-            infra_qs = Infrastructure.objects.all()
-            if hasattr(Infrastructure, 'city'):
-                infra_qs = infra_qs.filter(Q(city__iexact=city) | Q(zone__in=city_zones))
-            else:
-                infra_qs = infra_qs.filter(zone__in=city_zones)
+            # 3. Query Infrastructure (Infrastructure model uses city field and geometry)
+            infra_qs = Infrastructure.objects.filter(city__iexact=city)
             
             selected_zone = None
             if zone_id and zone_id.isdigit():
-                incidents_qs = incidents_qs.filter(zone_id=zone_id)
-                infra_qs = infra_qs.filter(zone_id=zone_id)
-                selected_zone = Zone.objects.filter(id=zone_id).first()
+                selected_zone = Zone.objects.filter(id=int(zone_id)).first()
+                incidents_qs = incidents_qs.filter(zone_id=int(zone_id))
+                if selected_zone and selected_zone.boundary:
+                    try:
+                        infra_qs = infra_qs.filter(geometry__intersects=selected_zone.boundary)
+                    except Exception:
+                        pass  # keep city-level infra if spatial query fails
+
+            incidents_qs = incidents_qs.exclude(category__iexact="Other")
 
             # 4. Crime & Infrastructure Aggregations
             crime_breakdown = list(
@@ -415,8 +417,7 @@ class CrimeTrendView(APIView):
             )
             if zone_id and zone_id.isdigit():
                 qs = qs.filter(zone_id=zone_id)
-            else:
-                qs = qs.filter(zone__in=city_zones)
+            qs = qs.exclude(category__iexact="Other")
 
             monthly = (
                 qs
