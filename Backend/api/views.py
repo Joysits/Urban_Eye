@@ -36,46 +36,52 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            token, _ = Token.objects.get_or_create(user=user)
-            user_data = UserSerializer(user).data
-            return Response({
-                "message": "User registered successfully",
-                "token": token.key,
-                "user": user_data
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            serializer = RegisterSerializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.save()
+                token, _ = Token.objects.get_or_create(user=user)
+                user_data = UserSerializer(user).data
+                return Response({
+                    "message": "User registered successfully",
+                    "token": token.key,
+                    "user": user_data
+                }, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Registration failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        username_or_email = request.data.get("username") or request.data.get("email")
-        password = request.data.get("password")
+        try:
+            username_or_email = request.data.get("username") or request.data.get("email")
+            password = request.data.get("password")
 
-        if not username_or_email or not password:
-            return Response({"error": "Please provide username/email and password."}, status=status.HTTP_400_BAD_REQUEST)
+            if not username_or_email or not password:
+                return Response({"error": "Please provide username/email and password."}, status=status.HTTP_400_BAD_REQUEST)
 
-        username = username_or_email
-        if "@" in username_or_email:
-            user_obj = User.objects.filter(email__iexact=username_or_email).first()
-            if user_obj is None:
-                return Response({"error": "Invalid credentials. User not found."}, status=status.HTTP_401_UNAUTHORIZED)
-            username = user_obj.username
+            username = username_or_email
+            if "@" in username_or_email:
+                user_obj = User.objects.filter(email__iexact=username_or_email).first()
+                if user_obj is None:
+                    return Response({"error": "Invalid credentials. User address not found."}, status=status.HTTP_401_UNAUTHORIZED)
+                username = user_obj.username
 
-        user = authenticate(username=username, password=password)
+            user = authenticate(username=username, password=password)
 
-        if user is not None:
-            if not user.is_active:
-                return Response({"error": "This account has been deactivated."}, status=status.HTTP_403_FORBIDDEN)
-            token, _ = Token.objects.get_or_create(user=user)
-            user_data = UserSerializer(user).data
-            return Response({"token": token.key, "user": user_data}, status=status.HTTP_200_OK)
-        else:
-            return Response({"error": "Invalid email/username or password."}, status=status.HTTP_401_UNAUTHORIZED)
+            if user is not None:
+                if not user.is_active:
+                    return Response({"error": "This account has been deactivated."}, status=status.HTTP_403_FORBIDDEN)
+                token, _ = Token.objects.get_or_create(user=user)
+                user_data = UserSerializer(user).data
+                return Response({"token": token.key, "user": user_data}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "Invalid email/username or password."}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"error": f"Authentication failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutView(APIView):
