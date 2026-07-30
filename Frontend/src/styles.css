@@ -1136,9 +1136,11 @@ p { margin-top: 0; }
   background: transparent;
 }
 .leaflet-container {
-  width: 100%;
-  height: 100%;
-  background: transparent;
+  width: 100% !important;
+  height: 100% !important;
+  background: #141722 !important;
+  border-radius: inherit;
+  overflow: hidden !important;
 }
 
 /* ======================================================
@@ -2843,52 +2845,58 @@ select option { background-color: #0d0d0d; color: #e2e8f0; }
 .dev-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   margin-bottom: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 16px;
+  background: rgba(24, 28, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 20px 24px;
   flex-wrap: wrap;
   gap: 16px;
 }
 
 .dev-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 800;
-  color: #f7fafc;
-  margin-bottom: 4px;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.01em;
 }
 
 .dev-subtitle {
-  font-size: 0.85rem;
-  color: #718096;
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.4;
 }
 
 .dev-tabs {
   display: flex;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dev-tab-btn {
-  padding: 7px 16px;
+  padding: 8px 18px;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #a0aec0;
+  color: #94a3b8;
   background: transparent;
   border: none;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .dev-tab-btn.active {
-  background: rgba(201, 107, 107, 0.2);
+  background: rgba(230, 92, 92, 0.25);
   color: #fff;
-  border: 1px solid rgba(201, 107, 107, 0.35);
+  border: 1px solid rgba(230, 92, 92, 0.5);
 }
 
 .dev-grid {
@@ -2914,6 +2922,8 @@ select option { background-color: #0d0d0d; color: #e2e8f0; }
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 22px 24px;
+  margin-bottom: 24px;
+  overflow: hidden;
 }
 
 .dev-card-header {
@@ -2938,10 +2948,14 @@ select option { background-color: #0d0d0d; color: #e2e8f0; }
 }
 
 .dev-map-container {
-  height: 320px;
-  border-radius: 10px;
-  overflow: hidden;
+  height: 380px !important;
+  min-height: 380px !important;
+  width: 100% !important;
+  border-radius: 12px;
+  overflow: hidden !important;
+  position: relative;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 14px;
 }
 
 .dev-coords-bar {

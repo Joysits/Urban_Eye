@@ -20,6 +20,8 @@ export interface Zone {
   };
 }
 
+export type ZoneFeature = any;
+
 export interface AnalysisData {
   city: string;
   zone_id: string | null;

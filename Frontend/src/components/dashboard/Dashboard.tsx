@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { User } from '../../types';
 import AreaIntelligenceView from '../area-intelligence/AreaIntelligenceView';
 import DevPlanningView from '../planning/DevPlanningView';
+import ReportGeneratorView from '../reports/ReportGeneratorView';
 
 interface Props {
   currentUser: User;
@@ -17,11 +18,12 @@ const NAV_ITEMS = [
 
 export default function Dashboard({ currentUser, onLogout }: Props) {
   const [activePage, setActivePage] = useState('home');
+  const [selectedCity, setSelectedCity] = useState(currentUser.city || 'Nairobi');
   const displayName = currentUser.name || currentUser.email || 'User';
 
   return (
     <div className="dashboard-skyline-shell">
-      {/* Sidebar with dark glass floating over Nairobi skyline */}
+      {/* Sidebar */}
       <aside className="sidebar-skyline-glass">
         {/* Brand Header */}
         <div className="brand-skyline">
@@ -37,11 +39,10 @@ export default function Dashboard({ currentUser, onLogout }: Props) {
           </div>
         </div>
 
-        {/* User Card Pill */}
+        {/* User Details Pill */}
         <div className="user-skyline-card">
-          <span className="user-skyline-label">Signed in as</span>
           <strong className="user-skyline-name">{displayName}</strong>
-          <small className="user-skyline-role">{currentUser.city || 'Nairobi'} / {currentUser.role || 'Urban Planner'}</small>
+          <small className="user-skyline-role">{selectedCity} / {currentUser.role || 'Urban Planner'}</small>
         </div>
 
         {/* Navigation Items */}
@@ -73,166 +74,105 @@ export default function Dashboard({ currentUser, onLogout }: Props) {
         {activePage === 'home' && (
           <HomePage
             currentUser={currentUser}
+            selectedCity={selectedCity}
             onNavigate={setActivePage}
           />
         )}
         {activePage === 'analysis' && (
           <AreaIntelligenceView
-            currentCity={currentUser.city || 'Nairobi'}
+            currentCity={selectedCity}
+            onCityChange={setSelectedCity}
             onSwitchToReports={() => setActivePage('reports')}
           />
         )}
         {activePage === 'planning' && (
-          <DevPlanningView currentUser={currentUser} />
+          <DevPlanningView
+            currentUser={currentUser}
+            currentCity={selectedCity}
+            onCityChange={setSelectedCity}
+          />
         )}
         {activePage === 'reports' && (
-          <ReportsPage currentUser={currentUser} />
+          <ReportGeneratorView currentUser={{ ...currentUser, city: selectedCity }} />
         )}
       </main>
     </div>
   );
 }
 
-// ─── Home Page Component ───
-function HomePage({ currentUser, onNavigate }: { currentUser: User; onNavigate: (p: string) => void }) {
+// ─── Home Page Component (All green and yellow removed, uniform Red/Coral theme applied) ───
+function HomePage({ currentUser, selectedCity, onNavigate }: { currentUser: User; selectedCity: string; onNavigate: (p: string) => void }) {
+  const displayName = currentUser.name || currentUser.email || 'User';
+
   return (
     <div className="home-skyline-container fade-in">
-
       {/* Top Header Bar */}
       <div className="home-skyline-topbar">
-        <h1 className="home-skyline-title">HOME</h1>
+        <h1 className="home-skyline-title">WELCOME, {displayName.toUpperCase()}</h1>
         <div className="home-skyline-user-badge">
-          {currentUser.city || 'Nairobi'} / {currentUser.role || 'Urban Planner'}
+          {selectedCity} / {currentUser.role || 'Urban Planner'}
         </div>
       </div>
 
-      {/* Hero Card with Glass overlay */}
+      {/* Hero Card */}
       <div className="home-skyline-hero">
-        <div className="hero-skyline-eyebrow">HOME DASHBOARD</div>
-        <h2 className="hero-skyline-headline">City Intelligence at a Glance.</h2>
+        <div className="hero-skyline-eyebrow">URBAN INTELLIGENCE DASHBOARD</div>
+        <h2 className="hero-skyline-headline">Your City at a glance</h2>
         <p className="hero-skyline-body">
-          Monitor live risk signals, planning priorities, AI forecasts, and reporting workflows from one workspace.
+          Monitor live risk signals, planning priorities, spatial forecasts, and executive reporting workflows for {selectedCity}.
         </p>
 
         <div className="hero-skyline-pills">
           <span className="skyline-pill">
-            <span className="live-pulse-dot" /> Live profile sync
+            <span className="live-pulse-dot" /> Live Spatial Sync ({selectedCity})
           </span>
           <span className="skyline-pill">
-            Geo analytics ready
-          </span>
-          <span className="skyline-pill">
-            AI predictions active
+            Geo Analytics Active
           </span>
         </div>
       </div>
 
-      {/* 3 Action Cards Grid */}
+      {/* 3 Action Cards Grid (All green and yellow removed) */}
       <div className="home-skyline-grid">
-        {/* Card 1: Area Analysis */}
         <div className="skyline-action-card">
           <div className="skyline-icon-box">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#e65c5c" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#f87171" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <div className="skyline-card-category">EXPLORE AREA ANALYSIS</div>
-          <p className="skyline-card-desc">
-            Select or draw a zone to view crime, population, and landuse layers.
-          </p>
+          <div className="skyline-card-category">Area Intelligence</div>
+          <p className="skyline-card-desc">Analyze neighborhood risk scores, crime trends, and live infrastructure.</p>
           <button className="skyline-card-btn" onClick={() => onNavigate('analysis')}>
-            OPEN AREA ANALYSIS
+            Explore Area Intelligence &rarr;
           </button>
         </div>
 
-        {/* Card 2: Development Planning */}
         <div className="skyline-action-card">
           <div className="skyline-icon-box">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#e65c5c" strokeWidth="2">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#f87171" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V12a1 1 0 011-1h2a1 1 0 011 1v9" />
             </svg>
           </div>
-          <div className="skyline-card-category">DEVELOPMENT PLANNING</div>
-          <p className="skyline-card-desc">
-            Sketch proposals, run impact simulations, and save draft plans.
-          </p>
+          <div className="skyline-card-category">Development Planning</div>
+          <p className="skyline-card-desc">Simulate proposed project impacts, land prices, and phase roadmaps.</p>
           <button className="skyline-card-btn" onClick={() => onNavigate('planning')}>
-            OPEN PLANNING TOOLS
+            Launch Impact Simulator &rarr;
           </button>
         </div>
 
-        {/* Card 3: Report Generator */}
         <div className="skyline-action-card">
           <div className="skyline-icon-box">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#e65c5c" strokeWidth="2">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#f87171" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
-          <div className="skyline-card-category">REPORTS & EXPORT</div>
-          <p className="skyline-card-desc">
-            Export current map view and selected data to the Report Generator.
-          </p>
+          <div className="skyline-card-category">Report Generator</div>
+          <p className="skyline-card-desc">Generate 1-click PDF executive reports for Area Analysis or Planning.</p>
           <button className="skyline-card-btn" onClick={() => onNavigate('reports')}>
-            GO TO REPORT GENERATOR
+            Export PDF Reports &rarr;
           </button>
         </div>
       </div>
-
-    </div>
-  );
-}
-
-// ─── Reports Page Component ───
-function ReportsPage({ currentUser }: { currentUser: User }) {
-  const [reports, setReports] = useState<Array<{
-    id: number; title: string; city: string; focus: string; created_at: string; summary: string;
-  }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    fetch('/api/reports/', {
-      headers: { 'Content-Type': 'application/json', Authorization: `Token ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => setReports(d.results ?? d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [currentUser.city]);
-
-  if (loading) return (
-    <div style={{ padding: 60, textAlign: 'center', color: '#e65c5c' }}>
-      <div className="spinner" style={{ margin: '0 auto 16px' }} />Loading reports…
-    </div>
-  );
-
-  return (
-    <div className="reports-page-skyline fade-in">
-      <div className="reports-header-skyline">
-        <h2>Generated Reports</h2>
-        <span className="reports-count-skyline">{reports.length} report{reports.length !== 1 ? 's' : ''}</span>
-      </div>
-      {reports.length === 0 ? (
-        <div className="reports-empty-skyline">
-          <div style={{ fontSize: '3rem' }}>▤</div>
-          <h3>No reports saved yet</h3>
-          <p>Export a report from Area Analysis to archive it here.</p>
-        </div>
-      ) : (
-        <div className="reports-grid-skyline">
-          {reports.map(r => (
-            <div key={r.id} className="report-card-skyline">
-              <div className="report-card-skyline-top">
-                <span className={`report-focus-tag focus-${r.focus}`}>{r.focus}</span>
-                <span className="report-date-str">{new Date(r.created_at).toLocaleDateString()}</span>
-              </div>
-              <h3 className="report-card-skyline-title">{r.title}</h3>
-              <div className="report-city-skyline-badge">{r.city}</div>
-              <pre className="report-pre-skyline-summary">{r.summary.slice(0, 240)}{r.summary.length > 240 ? '…' : ''}</pre>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

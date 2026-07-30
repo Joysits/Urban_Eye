@@ -3,13 +3,19 @@ import type { AnalysisData, Zone } from '../../types';
 import RiskScoreRing from './RiskScoreRing';
 
 interface Props {
-  zoneA: AnalysisData | null;
-  zoneB: AnalysisData | null;
+  zoneA?: AnalysisData | null;
+  dataA?: AnalysisData | null;
+  zoneB?: AnalysisData | null;
+  dataB?: AnalysisData | null;
   zones: Zone[];
-  selectedZoneA: string;
-  selectedZoneB: string;
-  onSelectZoneA: (id: string) => void;
-  onSelectZoneB: (id: string) => void;
+  selectedZoneA?: string;
+  selectedZoneB?: string;
+  zoneAId?: string;
+  zoneBId?: string;
+  onSelectZoneA?: (id: string) => void;
+  onSelectZoneB?: (id: string) => void;
+  onZoneAChange?: (id: string) => void;
+  onZoneBChange?: (id: string) => void;
   city: string;
   loading: boolean;
 }
@@ -25,7 +31,6 @@ function Delta({ a, b, label, higherIsBetter = false }: {
   if (a == null || b == null) return null;
   const diff = a - b;
   const isPositive = diff >= 0;
-  // For risk/incidents: higher is BAD. For growth/population: higher is GOOD
   const isBetter = higherIsBetter ? isPositive : !isPositive;
   const color = diff === 0 ? '#718096' : isBetter ? '#68d391' : '#fc8181';
   return (
@@ -136,28 +141,38 @@ function ZoneCard({ data, label, colorClass }: {
 }
 
 export default function ComparisonMode({
-  zoneA, zoneB, zones, selectedZoneA, selectedZoneB,
-  onSelectZoneA, onSelectZoneB, city, loading,
+  zoneA, dataA, zoneB, dataB, zones, selectedZoneA, zoneAId,
+  selectedZoneB, zoneBId, onSelectZoneA, onZoneAChange,
+  onSelectZoneB, onZoneBChange, city, loading,
 }: Props) {
+  const activeZoneAData = zoneA ?? dataA ?? null;
+  const activeZoneBData = zoneB ?? dataB ?? null;
+
+  const selA = selectedZoneA ?? zoneAId ?? '';
+  const selB = selectedZoneB ?? zoneBId ?? '';
+
+  const setA = onSelectZoneA ?? onZoneAChange;
+  const setB = onSelectZoneB ?? onZoneBChange;
+
   // Fetch trend data for both zones
   const [trendA, setTrendA] = useState<{ month: string; total: number }[]>([]);
   const [trendB, setTrendB] = useState<{ month: string; total: number }[]>([]);
 
   useEffect(() => {
-    if (!selectedZoneA) { setTrendA([]); return; }
-    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selectedZoneA}&months=6`, { headers: authHeaders() })
+    if (!selA) { setTrendA([]); return; }
+    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selA}&months=6`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setTrendA(d.month_totals ?? []))
       .catch(() => setTrendA([]));
-  }, [selectedZoneA, city]);
+  }, [selA, city]);
 
   useEffect(() => {
-    if (!selectedZoneB) { setTrendB([]); return; }
-    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selectedZoneB}&months=6`, { headers: authHeaders() })
+    if (!selB) { setTrendB([]); return; }
+    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selB}&months=6`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setTrendB(d.month_totals ?? []))
       .catch(() => setTrendB([]));
-  }, [selectedZoneB, city]);
+  }, [selB, city]);
 
   const maxTrend = Math.max(...trendA.map(m => m.total), ...trendB.map(m => m.total), 1);
 
@@ -166,23 +181,23 @@ export default function ComparisonMode({
       <div className="comp-header">
         <div>
           <h2 className="comp-title">Zone Comparison</h2>
-          <p className="comp-subtitle">{city} · Side-by-side intelligence analysis</p>
+          <p className="comp-subtitle">{city} · Side-by-side comparative analysis</p>
         </div>
       </div>
 
       <div className="comp-selectors">
         <div className="comp-selector">
           <label>Zone A</label>
-          <select value={selectedZoneA} onChange={e => onSelectZoneA(e.target.value)}>
-            <option value="">— Select Zone A —</option>
+          <select value={selA} onChange={e => setA?.(e.target.value)}>
+            <option value="">Select Zone A</option>
             {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
           </select>
         </div>
         <div className="comp-vs">VS</div>
         <div className="comp-selector">
           <label>Zone B</label>
-          <select value={selectedZoneB} onChange={e => onSelectZoneB(e.target.value)}>
-            <option value="">— Select Zone B —</option>
+          <select value={selB} onChange={e => setB?.(e.target.value)}>
+            <option value="">Select Zone B</option>
             {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
           </select>
         </div>
@@ -191,25 +206,25 @@ export default function ComparisonMode({
       {loading && (
         <div style={{ textAlign: 'center', color: '#a0aec0', padding: '40px' }}>
           <div className="spinner" style={{ margin: '0 auto 12px' }} />
-          Loading comparison data…
+          Loading zone comparison data…
         </div>
       )}
 
       {!loading && (
         <>
           <div className="comp-grid">
-            <ZoneCard data={zoneA} label="ZONE A" colorClass="a" />
+            <ZoneCard data={activeZoneAData} label="ZONE A" colorClass="a" />
 
             <div className="comp-deltas">
               <h4>Differences (A − B)</h4>
-              <Delta a={zoneA?.risk_score ?? null}                             b={zoneB?.risk_score ?? null}                             label="Risk Score" />
-              <Delta a={zoneA?.total_incidents ?? null}                        b={zoneB?.total_incidents ?? null}                        label="Incidents" />
-              <Delta a={zoneA?.population_info?.density ?? null}               b={zoneB?.population_info?.density ?? null}               label="Density /km²" />
-              <Delta a={zoneA?.population_info?.growth_rate ?? null}           b={zoneB?.population_info?.growth_rate ?? null}           label="Growth %" higherIsBetter />
-              <Delta a={zoneA?.population_info?.total_population ?? null}      b={zoneB?.population_info?.total_population ?? null}      label="Population" higherIsBetter />
+              <Delta a={activeZoneAData?.risk_score ?? null}                             b={activeZoneBData?.risk_score ?? null}                             label="Risk Score" />
+              <Delta a={activeZoneAData?.total_incidents ?? null}                        b={activeZoneBData?.total_incidents ?? null}                        label="Incidents" />
+              <Delta a={activeZoneAData?.population_info?.density ?? null}               b={activeZoneBData?.population_info?.density ?? null}               label="Density /km²" />
+              <Delta a={activeZoneAData?.population_info?.growth_rate ?? null}           b={activeZoneBData?.population_info?.growth_rate ?? null}           label="Growth %" higherIsBetter />
+              <Delta a={activeZoneAData?.population_info?.total_population ?? null}      b={activeZoneBData?.population_info?.total_population ?? null}      label="Population" higherIsBetter />
             </div>
 
-            <ZoneCard data={zoneB} label="ZONE B" colorClass="b" />
+            <ZoneCard data={activeZoneBData} label="ZONE B" colorClass="b" />
           </div>
 
           {/* Trend overlay chart */}
@@ -243,8 +258,8 @@ export default function ComparisonMode({
                 })}
               </div>
               <div className="comp-trend-legend">
-                <span><span className="comp-legend-dot" style={{ background: '#c93030' }} />{zoneA?.zone_name ?? 'Zone A'}</span>
-                <span><span className="comp-legend-dot" style={{ background: '#3b82f6' }} />{zoneB?.zone_name ?? 'Zone B'}</span>
+                <span><span className="comp-legend-dot" style={{ background: '#c93030' }} />{activeZoneAData?.zone_name ?? 'Zone A'}</span>
+                <span><span className="comp-legend-dot" style={{ background: '#3b82f6' }} />{activeZoneBData?.zone_name ?? 'Zone B'}</span>
               </div>
             </div>
           )}
