@@ -8,6 +8,7 @@ interface Props {
   currentUser: User;
   currentCity?: string;
   onCityChange?: (city: string) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 interface ProjectPlan {
@@ -41,29 +42,29 @@ const CITY_CENTERS: Record<string, [number, number]> = {
 };
 
 const PROJECT_TYPE_CONFIG: Record<string, { color: string; defaultSummary: string }> = {
-  Road: {
+  Commercial: {
     color: '#e65c5c',
-    defaultSummary: 'New arterial transport link connecting residential corridors to primary commercial hubs.',
+    defaultSummary: 'Commercial retail & office development with parking and public transport integration.',
   },
-  Hospital: {
+  Healthcare: {
     color: '#ef4444',
     defaultSummary: 'Regional healthcare facility expanding emergency coverage and specialized outpatient care.',
   },
-  School: {
+  Education: {
     color: '#f97316',
     defaultSummary: 'Integrated educational campus serving local demographic growth and vocational training.',
   },
-  Mall: {
-    color: '#e65c5c',
-    defaultSummary: 'Commercial retail center with subterranean parking and public transport integration.',
-  },
-  Residential: {
+  Housing: {
     color: '#10b981',
     defaultSummary: 'High-density mixed-income housing development with green space and solar grid.',
   },
+  Transport: {
+    color: '#3b82f6',
+    defaultSummary: 'Primary transport corridor and transit hub connecting residential and commercial zones.',
+  },
 };
 
-export default function DevPlanningView({ currentUser, currentCity, onCityChange }: Props) {
+export default function DevPlanningView({ currentUser, currentCity, onCityChange, onShowToast }: Props) {
   const city = currentCity || currentUser.city || 'Nairobi';
 
   // Map state
@@ -206,14 +207,20 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
     })
       .then(r => (r.ok ? r.json() : []))
       .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setSavedPlans(data);
         } else {
-          setSavedPlans(getSamplePlans(city));
+          const userKey = (currentUser?.email || 'guest').toLowerCase();
+          const localStored = localStorage.getItem(`saved_planning_proposals_${userKey}`);
+          setSavedPlans(localStored ? JSON.parse(localStored) : []);
         }
       })
-      .catch(() => setSavedPlans(getSamplePlans(city)));
-  }, [city]);
+      .catch(() => {
+        const userKey = (currentUser?.email || 'guest').toLowerCase();
+        const localStored = localStorage.getItem(`saved_planning_proposals_${userKey}`);
+        setSavedPlans(localStored ? JSON.parse(localStored) : []);
+      });
+  }, [city, currentUser]);
 
   // Dynamic Zone-Specific Simulation Calculations
   const handleRunSimulation = () => {
@@ -248,7 +255,7 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
         landPrice = `KES ${110 + (hash % 40)}M – ${160 + (hash % 50)}M / Acre`;
         score = 91 + (hash % 6);
         successRate = `${score}% Excellent Commercial Growth`;
-        trafficExp = `High traffic density along arterial corridors in ${locName}. Dedicated turning lanes recommended during evening peak hours (4:30 PM - 7:30 PM).`;
+        trafficExp = `High traffic density along main road corridors in ${locName}. Dedicated turning lanes recommended during evening peak hours (4:30 PM - 7:30 PM).`;
         popExp = `Heavy foot traffic corridor bringing ~18,500 daily shoppers, office workers, and residents within a 15-minute radius.`;
         crimeExp = `Moderate commercial risk. High-definition CCTV coverage and private security patrols advised for late evening hours.`;
       } else if (locLower.includes('pioneer') || locLower.includes('langas') || locLower.includes('huruma') || locLower.includes('kimumu') || locLower.includes('annex')) {
@@ -321,9 +328,30 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
       setSavedPlans(prev => [newPlan, ...prev.filter(p => p.id !== newPlan.id)]);
     }
 
-    alert('Project proposal saved successfully as a draft!');
+    try {
+      const userKey = (currentUser.email || 'guest').toLowerCase();
+      const existingProps = JSON.parse(localStorage.getItem(`saved_planning_proposals_${userKey}`) || '[]');
+      const updatedProps = [newPlan, ...existingProps.filter((p: any) => p.id !== newPlan.id)];
+      localStorage.setItem(`saved_planning_proposals_${userKey}`, JSON.stringify(updatedProps));
+    } catch (e) {
+      console.error(e);
+    }
+
+    onShowToast?.("Proposal Saved!");
     setEditingPlanId(null);
     setActiveTab('plans');
+  };
+
+  // Action: Delete Draft Plan
+  const handleDeletePlan = (id: any) => {
+    const updated = savedPlans.filter(p => p.id !== id);
+    setSavedPlans(updated);
+    try {
+      const userKey = (currentUser.email || 'guest').toLowerCase();
+      localStorage.setItem(`saved_planning_proposals_${userKey}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   // Action: Edit Draft
@@ -447,9 +475,8 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
       y += 18;
     }
 
-    // File name without dashes (using underscores/spaces)
-    const cleanFileName = plan.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    doc.save(`draft_plan_${cleanFileName}.pdf`);
+    const cleanFileName = plan.title.replace(/[^a-zA-Z0-9\s-]/g, '').trim().replace(/\s+/g, ' ');
+    doc.save(`${cleanFileName}.pdf`);
   };
 
   return (
@@ -504,24 +531,26 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
         >
           SAVED PROPOSALS ({savedPlans.length})
         </button>
-        <button
-          onClick={() => setActiveTab('timeline')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: activeTab === 'timeline' ? '#e65c5c' : '#64748b',
-            fontSize: '0.82rem',
-            fontWeight: 700,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            paddingBottom: 8,
-            borderBottom: activeTab === 'timeline' ? '2px solid #e65c5c' : '2px solid transparent',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          PROJECT TIMELINE & PHASING
-        </button>
+        {savedPlans.length > 0 && (
+          <button
+            onClick={() => setActiveTab('timeline')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: activeTab === 'timeline' ? '#e65c5c' : '#64748b',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              paddingBottom: 8,
+              borderBottom: activeTab === 'timeline' ? '2px solid #e65c5c' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            PROJECT TIMELINE & PHASING
+          </button>
+        )}
       </div>
 
       {activeTab === 'simulator' && (
@@ -615,11 +644,11 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
                       style={{ width: '100%', background: '#141823', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '8px 12px', color: '#fff', fontSize: '0.82rem', fontFamily: 'sans-serif' }}
                     >
                       <option value="">Select Category</option>
-                      <option value="Mall">Commercial / Mall</option>
-                      <option value="Hospital">Healthcare / Hospital</option>
-                      <option value="School">Education / School</option>
-                      <option value="Residential">Housing / Residential</option>
-                      <option value="Road">Transport / Road</option>
+                      <option value="Mall">Commercial</option>
+                      <option value="Hospital">Healthcare</option>
+                      <option value="School">Education</option>
+                      <option value="Residential">Housing</option>
+                      <option value="Road">Transport</option>
                     </select>
                   </div>
 
@@ -808,14 +837,22 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', margin: 0, fontFamily: 'sans-serif' }}>Archived Proposal Plans ({savedPlans.length})</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             {savedPlans.map(plan => {
-              const cfg = PROJECT_TYPE_CONFIG[plan.project_type] || PROJECT_TYPE_CONFIG.Road;
+              const cfg = PROJECT_TYPE_CONFIG[plan.project_type] || { color: '#e65c5c', defaultSummary: 'Proposed development project.' };
               return (
                 <div key={plan.id} style={{ background: '#0e1117', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <span style={{ color: cfg.color, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
                       {plan.project_type}
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b', letterSpacing: '0.5px' }}>{plan.stage}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', letterSpacing: '0.5px' }}>{plan.stage}</span>
+                      <button
+                        onClick={() => handleDeletePlan(plan.id)}
+                        style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: 4, padding: '2px 6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', margin: '0 0 6px 0', fontFamily: 'sans-serif' }}>{plan.title}</h3>
                   <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 14px 0', lineHeight: 1.4, fontFamily: 'sans-serif' }}>
@@ -902,7 +939,7 @@ function getSamplePlans(city: string): ProjectPlan[] {
       city,
       stage: 'Approved',
       summary: 'Integrated transit station plaza with retail commercial spaces and subterranean parking.',
-      planner_notes: 'High viability site near central arterial road.',
+      planner_notes: 'High viability site near central main road.',
       lat: CITY_CENTERS[city]?.[0] ?? -1.286,
       lng: CITY_CENTERS[city]?.[1] ?? 36.817,
       location_name: `${city} CBD`,

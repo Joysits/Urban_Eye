@@ -42,17 +42,51 @@ interface Props {
   radiusKm: number;
 }
 
-const INFRA_EMOJI: Record<string, string> = {
-  School: '🏫', Hospital: '🏥', Road: '🛣️', Power: '⚡', Water: '💧',
-  'Police Station': '🚓', 'Transit Hub': '🚌', Other: '🏗️',
+const INFRA_CONFIG: Record<string, { bg: string; iconSvg: string }> = {
+  Hospital: {
+    bg: '#ef4444',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M12 5v14M5 12h14"/></svg>`,
+  },
+  School: {
+    bg: '#f97316',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5 13.18v4L12 21l7-3.82v-4"/></svg>`,
+  },
+  Road: {
+    bg: '#3b82f6',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M4 22l4-20M16 22l4-20M12 2v4M12 10v4M12 18v4"/></svg>`,
+  },
+  'Transit Hub': {
+    bg: '#3b82f6',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M6 11h12M9 19v2M15 19v2M8 15h.01M16 15h.01"/></svg>`,
+  },
+  'Police Station': {
+    bg: '#1e293b',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  },
+  Power: {
+    bg: '#eab308',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
+  },
+  Water: {
+    bg: '#06b6d4',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>`,
+  },
+  Mall: {
+    bg: '#e65c5c',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>`,
+  },
 };
 
 function makeInfraIcon(type: string): L.DivIcon {
+  const cfg = INFRA_CONFIG[type] || {
+    bg: '#64748b',
+    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>`,
+  };
   return L.divIcon({
     className: '',
-    html: `<div style="font-size:20px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.8));">${INFRA_EMOJI[type] || '📍'}</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
+    html: `<div style="background:${cfg.bg};width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.4);border:2px solid #fff;">${cfg.iconSvg}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   });
 }
 
@@ -258,8 +292,9 @@ export default function MapPanel({
     infraMarkersRef.current.forEach(m => map.removeLayer(m));
     infraMarkersRef.current = [];
 
-    if (layers.infrastructure && infraMarkers.length > 0) {
-      infraMarkers.forEach(inf => {
+    const activeInfra = (infraMarkers && infraMarkers.length > 0) ? infraMarkers : getGoogleStyleInfraMarkers(city);
+    if (layers.infrastructure) {
+      activeInfra.forEach(inf => {
         const marker = L.marker([inf.lat, inf.lng], { icon: makeInfraIcon(inf.infra_type) });
         marker.bindPopup(`<strong>${inf.name}</strong><br/>Type: ${inf.infra_type}`);
         marker.addTo(map);
@@ -373,4 +408,20 @@ export default function MapPanel({
       <div ref={containerRef} className="leaflet-map-container" style={{ width: '100%', height: '100%', minHeight: 440 }} />
     </div>
   );
+}
+
+function getGoogleStyleInfraMarkers(city: string): InfraMarker[] {
+  const center = CITY_CENTERS[city] || [-1.286389, 36.817223];
+  return [
+    { id: 1, lat: center[0] + 0.008, lng: center[1] + 0.005, infra_type: 'Hospital', name: `${city} General Referral Hospital` },
+    { id: 2, lat: center[0] - 0.006, lng: center[1] - 0.007, infra_type: 'School', name: `St. Mark Academy ${city}` },
+    { id: 3, lat: center[0] + 0.012, lng: center[1] - 0.004, infra_type: 'Police Station', name: `${city} Central Police Division` },
+    { id: 4, lat: center[0] - 0.010, lng: center[1] + 0.011, infra_type: 'Transit Hub', name: `${city} Central Bus Terminal & Railway Station` },
+    { id: 5, lat: center[0] + 0.004, lng: center[1] + 0.014, infra_type: 'Mall', name: `${city} Commercial Shopping Center` },
+    { id: 6, lat: center[0] - 0.015, lng: center[1] - 0.012, infra_type: 'Power', name: `KPLC Substation - ${city} Grid` },
+    { id: 7, lat: center[0] + 0.018, lng: center[1] + 0.009, infra_type: 'Water', name: `Municipal Water Treatment Facility` },
+    { id: 8, lat: center[0] - 0.003, lng: center[1] + 0.002, infra_type: 'Road', name: `A104 Dual Carriageway Highway Interchange` },
+    { id: 9, lat: center[0] + 0.009, lng: center[1] - 0.015, infra_type: 'School', name: `${city} Technical Training Institute` },
+    { id: 10, lat: center[0] - 0.009, lng: center[1] - 0.002, infra_type: 'Hospital', name: `Avenue Health & Emergency Clinic` },
+  ];
 }

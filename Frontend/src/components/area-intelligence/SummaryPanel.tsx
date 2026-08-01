@@ -192,11 +192,11 @@ export function RecentIncidentsCard({ data }: { data: AnalysisData | null }) {
   const city = data?.city || 'Nairobi';
 
   const sampleFeed = [
-    { category: 'TRAFFIC & MOBILITY DISRUPTIONS', location: `${zoneName}, ${city}`, severity: 'LOW', color: '#10b981', time: '14:32', desc: 'Traffic congestion peaks during afternoon travel (4:00 PM - 7:30 PM).' },
-    { category: 'TRAFFIC & MOBILITY DISRUPTIONS', location: `Central Business District, ${city}`, severity: 'CRITICAL', color: '#ef4444', time: '13:18', desc: 'Major arterial corridor delay near central transit station.' },
-    { category: 'TRAFFIC & MOBILITY DISRUPTIONS', location: `${zoneName}, ${city}`, severity: 'LOW', color: '#10b981', time: '12:04', desc: 'Routine traffic slow-down near commercial intersection.' },
+    { category: 'BURGLARY', location: `${zoneName}, ${city}`, severity: 'HIGH', color: '#ef4444', time: '14:32', desc: 'Commercial premises security alert and break-in attempt logged.' },
+    { category: 'TRAFFIC & MOBILITY DISRUPTIONS', location: `Central Business District, ${city}`, severity: 'MODERATE', color: '#f59e0b', time: '13:18', desc: 'Main road corridor delay near central transit station during rush hour.' },
+    { category: 'THEFT', location: `${zoneName}, ${city}`, severity: 'HIGH', color: '#f97316', time: '11:45', desc: 'Pickpocketing & sneak theft near crowded transit boarding points.' },
     { category: 'ASSAULT', location: `${zoneName}, ${city}`, severity: 'MODERATE', color: '#f59e0b', time: '10:51', desc: 'Late-night disturbance reported near commercial entertainment venues.' },
-    { category: 'THEFT', location: `${zoneName}, ${city}`, severity: 'HIGH', color: '#f97316', time: '09:37', desc: 'Pickpocketing & sneak theft near crowded transit boarding points.' },
+    { category: 'BURGLARY', location: `Residential Area, ${city}`, severity: 'LOW', color: '#10b981', time: '08:20', desc: 'Perimeter fence breach attempt reported; security team dispatched.' },
   ];
 
   return (

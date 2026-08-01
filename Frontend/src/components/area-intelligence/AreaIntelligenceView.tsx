@@ -15,7 +15,6 @@ const CITY_CENTERS_MAP: Record<string, [number, number]> = {
   Eldoret: [0.514277, 35.26978],
 };
 
-// Comprehensive Official Administrative Zones in Kenya (Nairobi, Mombasa, Eldoret)
 export const OFFICIAL_CITY_ZONES: Record<string, string[]> = {
   Eldoret: [
     'Eldoret CBD', 'Pioneer', 'Langas', 'Huruma', 'Kapseret',
@@ -35,9 +34,8 @@ export const OFFICIAL_CITY_ZONES: Record<string, string[]> = {
   ],
 };
 
-// Real KNBS Official Zone Population & Area Mapping
 const ZONE_POPULATIONS: Record<string, { pop: number; areaKm2: number }> = {
-  // Eldoret Wards / Zones
+ // Eldoret zones
   'Eldoret CBD': { pop: 35000, areaKm2: 4.5 },
   'Pioneer': { pop: 54200, areaKm2: 11.2 },
   'Langas': { pop: 78500, areaKm2: 8.4 },
@@ -91,9 +89,10 @@ interface Props {
   currentCity: string;
   onCityChange?: (city: string) => void;
   onSwitchToReports?: () => void;
+  onShowToast?: (msg: string) => void;
 }
 
-export default function AreaIntelligenceView({ currentCity, onCityChange, onSwitchToReports }: Props) {
+export default function AreaIntelligenceView({ currentCity, onCityChange, onSwitchToReports, onShowToast }: Props) {
   const [city, setCity] = useState(currentCity || 'Nairobi');
 
   useEffect(() => {
@@ -268,13 +267,23 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
     if (!compareMode) return;
     setCompLoading(true);
 
-    const fetchSingleZone = (zId: string) => {
-      if (!zId) return Promise.resolve(null);
-      return fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${zId}`, {
-        headers: authHeaders(),
-      })
-        .then(r => (r.ok ? r.json() : getCalculatedZoneData(city, zId, null, 5)))
-        .catch(() => getCalculatedZoneData(city, zId, null, 5));
+    const fetchSingleZone = async (zId: string) => {
+      if (!zId) return null;
+      const calculated = getCalculatedZoneData(city, zId, null, 5);
+      try {
+        const r = await fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${zId}`, {
+          headers: authHeaders(),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          data.population_info = calculated.population_info;
+          data.risk_score = calculated.risk_score;
+          data.total_incidents = calculated.total_incidents;
+          data.crime_breakdown = calculated.crime_breakdown;
+          return data;
+        }
+      } catch (_) {}
+      return calculated;
     };
 
     Promise.all([fetchSingleZone(zoneAId), fetchSingleZone(zoneBId)])
@@ -307,23 +316,34 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
     downloadPdfReport(reportObj);
 
     try {
-      await fetch('/api/reports/generate_from_analysis/', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          city,
-          zone_id: selectedZone ? Number(selectedZone) : null,
-          title: reportTitle,
-          focus: 'safety',
-          summary: summaryText,
-        }),
-      });
-      showToast('PDF downloaded & report saved!', 'success');
-    } catch {
-      showToast('PDF downloaded successfully!', 'success');
-    } finally {
-      setExportLoading(false);
+      const savedUserStr = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
+      const userKey = (savedUser?.email || 'guest').toLowerCase();
+      const existingProps = JSON.parse(localStorage.getItem(`saved_planning_proposals_${userKey}`) || '[]');
+      const newReportProposal = {
+        id: Date.now(),
+        title: reportTitle,
+        project_type: 'Area Assessment',
+        city,
+        stage: 'Approved',
+        summary: summaryText,
+        planner_notes: summaryText,
+        location_name: analysisData.zone_name,
+        created_at: new Date().toISOString(),
+        impact: { success_score: analysisData.risk_score },
+      };
+      localStorage.setItem(`saved_planning_proposals_${userKey}`, JSON.stringify([newReportProposal, ...existingProps.filter((p: any) => p.title !== reportTitle)]));
+    } catch (e) {
+      console.error(e);
     }
+
+    const toastText = "Report saved successfully!";
+    if (onShowToast) {
+      onShowToast(toastText);
+    } else {
+      showToast(toastText, 'success');
+    }
+    setExportLoading(false);
   };
 
   // Reverse-geocode dropped pin coordinates to set exact location name
@@ -484,6 +504,7 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
           dataA={dataA}
           dataB={dataB}
           loading={compLoading}
+          onShowToast={onShowToast}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

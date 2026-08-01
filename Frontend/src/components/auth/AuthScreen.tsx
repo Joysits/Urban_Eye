@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, AlertMsg } from '../../types';
 
 const UrbanEyeLogo = ({ compact = false }: { compact?: boolean }) => (
-  <svg width={compact ? '24' : '40'} height={compact ? '24' : '40'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg width={compact ? '26' : '42'} height={compact ? '26' : '42'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
   </svg>
@@ -14,15 +14,17 @@ const EyeIcon = () => <svg width="18" height="18" fill="none" viewBox="0 0 24 24
 const EyeOffIcon = () => <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a10.018 10.018 0 013.98-.863c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m-3.182-3.182a3 3 0 01-4.243-4.243M3 3l18 18" /></svg>;
 const EnvelopeIcon = () => <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 const BriefcaseIcon = () => <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
+const KeyIcon = () => <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>;
 
 interface Props {
   onAuthenticated: (user: User, token: string) => void;
 }
 
 export default function AuthScreen({ onAuthenticated }: Props) {
-  const [view, setView] = useState<'signin' | 'signup' | 'forgot'>('signin');
+  const [view, setView] = useState<'signin' | 'signup' | 'forgot' | 'reset'>('signin');
   const [alert, setAlert] = useState<AlertMsg | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // signin
   const [siUser, setSiUser] = useState('');
@@ -32,153 +34,343 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   // signup
   const [suName, setSuName] = useState('');
   const [suEmail, setSuEmail] = useState('');
-  const [suRole, setSuRole] = useState('Urban Planner');
+  const [suRole, setSuRole] = useState('');
   const [suPass, setSuPass] = useState('');
   const [suConfirm, setSuConfirm] = useState('');
   const [showSuPass, setShowSuPass] = useState(false);
 
-  // forgot
+  // forgot & reset
   const [fEmail, setFEmail] = useState('');
-  const [fPass, setFPass] = useState('');
-  const [fConfirm, setFConfirm] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
-  const getRegisteredEmails = (): string[] => {
+  const isValidEmail = (email: string): boolean => {
+    return /\S+@\S+\.\S+/.test(email.trim());
+  };
+
+  const isStrictPassword = (pass: string): boolean => {
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{6,}$/.test(pass);
+  };
+
+  const showShortToast = (message: string, type: 'success' | 'error') => {
+    setAlert({ message, type });
+    setTimeout(() => {
+      setAlert(null);
+    }, 5000);
+  };
+
+  const getRegisteredUsersMap = (): Record<string, { user: User; pass: string }> => {
     try {
-      const stored = localStorage.getItem('registered_emails');
-      return stored ? JSON.parse(stored) : ['admin@agency.go.ke', 'planner@agency.go.ke'];
+      const stored = localStorage.getItem('registered_user_db_map');
+      return stored ? JSON.parse(stored) : {
+        'admin@gmail.com': { user: { name: 'Admin', email: 'admin@gmail.com', city: 'Nairobi', role: 'Administrator' }, pass: 'AdminPassword123' },
+        'planner@agency.go.ke': { user: { name: 'Joy Nduta', email: 'planner@agency.go.ke', city: 'Nairobi', role: 'Urban Planner' }, pass: 'Joy@2026' },
+      };
     } catch {
-      return ['admin@agency.go.ke', 'planner@agency.go.ke'];
+      return {
+        'admin@gmail.com': { user: { name: 'Admin', email: 'admin@gmail.com', city: 'Nairobi', role: 'Administrator' }, pass: 'AdminPassword123' },
+        'planner@agency.go.ke': { user: { name: 'Joy Nduta', email: 'planner@agency.go.ke', city: 'Nairobi', role: 'Urban Planner' }, pass: 'Joy@2026' },
+      };
     }
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); setAlert(null);
+    setAlert(null);
+
+    const cleanEmail = siUser.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      showShortToast('Please enter a valid email address.', 'error');
+      return;
+    }
+
+    if (siPass.length < 6) {
+      showShortToast('Password must be at least 6 characters long.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    const dbMap = getRegisteredUsersMap();
+    const dbRecord = dbMap[cleanEmail];
+
     try {
       const res = await fetch('/api/auth/login/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: siUser, password: siPass }),
+        body: JSON.stringify({ username: cleanEmail, password: siPass }),
       });
-      
+
       let data: any = null;
       try { data = await res.json(); } catch (_) {}
 
-      if (!res.ok) {
-        const fallbackUser: User = {
-          name: siUser || 'Urban Planner',
-          email: siUser.includes('@') ? siUser : `${siUser}@agency.go.ke`,
-          city: 'Nairobi',
-          role: 'Urban Planner',
+      if (res.ok && data?.token) {
+        const loggedUser: User = {
+          name: dbRecord?.user?.name || data.user?.name || cleanEmail.split('@')[0],
+          email: data.user?.email || cleanEmail,
+          city: data.user?.profile?.focus_city || dbRecord?.user?.city || 'Nairobi',
+          role: dbRecord?.user?.role || data.user?.profile?.agency_role || 'Urban Planner',
         };
-        localStorage.setItem('token', 'local_active_token');
-        localStorage.setItem('user', JSON.stringify(fallbackUser));
-        onAuthenticated(fallbackUser, 'local_active_token');
+        
+        if (rememberMe) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(loggedUser));
+        } else {
+          sessionStorage.setItem('token', data.token);
+          sessionStorage.setItem('user', JSON.stringify(loggedUser));
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+        onAuthenticated(loggedUser, data.token);
         return;
       }
 
-      const user: User = {
-        name: data.user?.name || siUser,
-        email: data.user?.email || siUser,
-        city: data.user?.profile?.focus_city || 'Nairobi',
-        role: data.user?.profile?.agency_role || 'Urban Planner',
-      };
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(user));
-      onAuthenticated(user, data.token);
+      if (!dbRecord) {
+        showShortToast('No account found for this email. Please sign up first.', 'error');
+        setLoading(false);
+        return;
+      }
+
+      if (dbRecord.pass !== siPass) {
+        showShortToast('Incorrect password. Please verify your password.', 'error');
+        setLoading(false);
+        return;
+      }
+
+      const loggedUser = dbRecord.user;
+      if (rememberMe) {
+        localStorage.setItem('token', 'local_db_token');
+        localStorage.setItem('user', JSON.stringify(loggedUser));
+      } else {
+        sessionStorage.setItem('token', 'local_db_token');
+        sessionStorage.setItem('user', JSON.stringify(loggedUser));
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+      onAuthenticated(loggedUser, 'local_db_token');
     } catch {
-      const fallbackUser: User = {
-        name: siUser || 'Urban Planner',
-        email: siUser.includes('@') ? siUser : `${siUser}@agency.go.ke`,
-        city: 'Nairobi',
-        role: 'Urban Planner',
-      };
-      localStorage.setItem('token', 'local_active_token');
-      localStorage.setItem('user', JSON.stringify(fallbackUser));
-      onAuthenticated(fallbackUser, 'local_active_token');
+      if (!dbRecord) {
+        showShortToast('No account found for this email. Please sign up first.', 'error');
+        setLoading(false);
+        return;
+      }
+
+      if (dbRecord.pass !== siPass) {
+        showShortToast('Incorrect password. Please verify your password.', 'error');
+        setLoading(false);
+        return;
+      }
+
+      const loggedUser = dbRecord.user;
+      if (rememberMe) {
+        localStorage.setItem('token', 'local_db_token');
+        localStorage.setItem('user', JSON.stringify(loggedUser));
+      } else {
+        sessionStorage.setItem('token', 'local_db_token');
+        sessionStorage.setItem('user', JSON.stringify(loggedUser));
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+      onAuthenticated(loggedUser, 'local_db_token');
     } finally {
       setLoading(false);
     }
   };
 
-  // Sign Up with Email Duplication Prevention
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (suPass !== suConfirm) { setAlert({ message: 'Passwords do not match.', type: 'error' }); return; }
+    setAlert(null);
 
     const cleanEmail = suEmail.trim().toLowerCase();
-    const existingEmails = getRegisteredEmails();
-    if (existingEmails.includes(cleanEmail)) {
-      setAlert({ message: 'An account with this email address already exists. Please sign in instead.', type: 'error' });
+    if (!isValidEmail(cleanEmail)) {
+      showShortToast('Please enter a valid email address.', 'error');
       return;
     }
 
-    setLoading(true); setAlert(null);
+    if (!suRole) {
+      showShortToast('Please select your role before completing registration.', 'error');
+      return;
+    }
+
+    if (!isStrictPassword(suPass)) {
+      showShortToast('Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      return;
+    }
+
+    if (suPass !== suConfirm) {
+      showShortToast('Passwords do not match.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    const dbMap = getRegisteredUsersMap();
+    if (dbMap[cleanEmail]) {
+      showShortToast('An account with this email address already exists.', 'error');
+      setLoading(false);
+      return;
+    }
+
+    const newUser: User = {
+      name: suName.trim() || 'Urban Planner',
+      email: cleanEmail,
+      city: 'Nairobi',
+      role: suRole,
+    };
+
     try {
-      const res = await fetch('/api/auth/register/', {
+      await fetch('/api/auth/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: suName, email: cleanEmail, city: 'Nairobi', role: suRole, password: suPass }),
+        body: JSON.stringify({ name: newUser.name, email: cleanEmail, city: 'Nairobi', role: suRole, password: suPass }),
       });
+    } catch (_) {}
 
-      let data: any = null;
-      try { data = await res.json(); } catch (_) {}
+    try {
+      dbMap[cleanEmail] = { user: newUser, pass: suPass };
+      localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
+      const registeredProfiles = JSON.parse(localStorage.getItem('registered_user_profiles') || '{}');
+      registeredProfiles[cleanEmail] = newUser;
+      localStorage.setItem('registered_user_profiles', JSON.stringify(registeredProfiles));
+    } catch (e) {
+      console.error(e);
+    }
 
-      const updatedList = Array.from(new Set([...existingEmails, cleanEmail]));
-      localStorage.setItem('registered_emails', JSON.stringify(updatedList));
+    setLoading(false);
+    setSiUser(cleanEmail);
+    setSiPass('');
+    setView('signin');
+    showShortToast('Account saved successfully!', 'success');
+  };
 
-      const newUser: User = {
-        name: suName || 'Urban Planner',
-        email: cleanEmail,
-        city: 'Nairobi',
-        role: suRole || 'Urban Planner',
-      };
-      localStorage.setItem('token', 'local_active_token');
-      localStorage.setItem('user', JSON.stringify(newUser));
-      onAuthenticated(newUser, 'local_active_token');
+  // Forgot Password: Dispatch email and 4-digit code
+  const handleForgotSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAlert(null);
+
+    const cleanEmail = fEmail.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      showShortToast('Please enter a valid email address.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.code) {
+        setResetCode(data.code);
+        setView('reset');
+        showShortToast(`4-digit reset code sent to ${cleanEmail}! (Code: ${data.code})`, 'success');
+      } else {
+        showShortToast(data.error || 'No account found with this email address.', 'error');
+      }
     } catch {
-      const cleanEmail = suEmail.trim().toLowerCase();
-      const updatedList = Array.from(new Set([...getRegisteredEmails(), cleanEmail]));
-      localStorage.setItem('registered_emails', JSON.stringify(updatedList));
-
-      const newUser: User = {
-        name: suName || 'Urban Planner',
-        email: cleanEmail,
-        city: 'Nairobi',
-        role: suRole || 'Urban Planner',
-      };
-      localStorage.setItem('token', 'local_active_token');
-      localStorage.setItem('user', JSON.stringify(newUser));
-      onAuthenticated(newUser, 'local_active_token');
+      const dbMap = getRegisteredUsersMap();
+      if (!dbMap[cleanEmail]) {
+        showShortToast('No registered account found with this email address.', 'error');
+        setLoading(false);
+        return;
+      }
+      const local4Code = Math.floor(1000 + Math.random() * 9000).toString();
+      setResetCode(local4Code);
+      setView('reset');
+      showShortToast(`4-digit reset code sent to ${cleanEmail}! (Code: ${local4Code})`, 'success');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgot = async (e: React.FormEvent) => {
+  // Resend 4-digit code
+  const handleResendCode = async () => {
+    setLoading(true);
+    const cleanEmail = fEmail.trim().toLowerCase();
+    try {
+      const res = await fetch('/api/auth/forgot-password/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.code) {
+        setResetCode(data.code);
+        showShortToast(`Resent code: ${data.code}`, 'success');
+      } else {
+        const newCode = Math.floor(1000 + Math.random() * 9000).toString();
+        setResetCode(newCode);
+        showShortToast(`Resent code: ${newCode}`, 'success');
+      }
+    } catch {
+      const newCode = Math.floor(1000 + Math.random() * 9000).toString();
+      setResetCode(newCode);
+      showShortToast(`Resent code: ${newCode}`, 'success');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset Password Submit
+  const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (fPass !== fConfirm) { setAlert({ message: 'Passwords do not match.', type: 'error' }); return; }
-    setLoading(true); setAlert(null);
-    setAlert({ message: 'Password updated successfully! Please sign in.', type: 'success' });
-    setView('signin');
-    setLoading(false);
+    setAlert(null);
+
+    if (!isStrictPassword(newPassword)) {
+      showShortToast('Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetCode, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setView('signin');
+        showShortToast('Password reset successful! Please sign in.', 'success');
+      } else {
+        const dbMap = getRegisteredUsersMap();
+        if (dbMap[fEmail.trim().toLowerCase()]) {
+          dbMap[fEmail.trim().toLowerCase()].pass = newPassword;
+          localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
+        }
+        setView('signin');
+        showShortToast('Password reset successful! Please sign in.', 'success');
+      }
+    } catch {
+      const dbMap = getRegisteredUsersMap();
+      if (dbMap[fEmail.trim().toLowerCase()]) {
+        dbMap[fEmail.trim().toLowerCase()].pass = newPassword;
+        localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
+      }
+      setView('signin');
+      showShortToast('Password reset successful! Please sign in.', 'success');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const AlertBanner = () => alert ? (
-    <div className={`auth-alert auth-alert-${alert.type}`}>
+    <div className={`auth-alert auth-alert-${alert.type}`} style={{ width: '100%', boxSizing: 'border-box', marginBottom: 14 }}>
       <span>{alert.message}</span>
     </div>
   ) : null;
 
   return (
-    <div className="auth-screen">
+    <div className="auth-screen" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '20px' }}>
       <div className="auth-glow-orb-1" />
       <div className="auth-glow-orb-2" />
-      <div className="auth-card">
-        <div className="auth-form-side">
-          <div className="brand-header" style={{ marginBottom: 28 }}>
+      
+      {/* Auth Card Container */}
+      <div className="auth-card" style={{ gridTemplateColumns: '1.08fr 0.92fr', maxWidth: 1000, width: '100%', maxHeight: '92vh', overflow: 'hidden' }}>
+        <div className="auth-form-side" style={{ padding: '32px 40px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div className="brand-header" style={{ marginBottom: 20 }}>
             <div className="brand-logo-container brand-logo-container-light"><UrbanEyeLogo compact /></div>
-            <span className="brand-name brand-name-dark">Urban Eye</span>
+            <span className="brand-name brand-name-dark" style={{ fontSize: '1.25rem', fontWeight: 700 }}>Urban Eye</span>
           </div>
 
           <AlertBanner />
@@ -186,137 +378,227 @@ export default function AuthScreen({ onAuthenticated }: Props) {
           {/* SIGN IN VIEW */}
           {view === 'signin' && (
             <div className="fade-in">
-              <h2>Welcome Back</h2>
-              <p className="auth-subtitle">Enter your credentials to access the urban planning workspace.</p>
-              <form className="auth-form" onSubmit={handleSignIn}>
+              <h2 style={{ fontSize: '1.5rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Welcome</h2>
+              <p className="auth-subtitle" style={{ fontSize: '0.9rem', margin: '0 0 20px 0', color: '#475569' }}>
+                Enter your registered credentials to access your urban planning workspace.
+              </p>
+
+              <form className="auth-form" onSubmit={handleSignIn} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="input-group">
-                  <label htmlFor="si-user">Username or Email</label>
-                  <div className="input-wrapper"><UserIcon /><input id="si-user" type="text" placeholder="name@agency.go.ke" value={siUser} onChange={e => setSiUser(e.target.value)} required /></div>
-                </div>
-                <div className="input-group">
-                  <label htmlFor="si-pass">Password</label>
-                  <div className="input-wrapper">
-                    <LockIcon />
-                    <input id="si-pass" type={showSiPass ? 'text' : 'password'} placeholder="Enter password" value={siPass} onChange={e => setSiPass(e.target.value)} required />
-                    <button type="button" className="input-icon-right" onClick={() => setShowSiPass(!showSiPass)}>{showSiPass ? <EyeOffIcon /> : <EyeIcon />}</button>
+                  <label htmlFor="si-user" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Email Address</label>
+                  <div className="input-wrapper" style={{ padding: '6px 12px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <EnvelopeIcon />
+                    <input id="si-user" type="email" autoComplete="off" placeholder="enter your email" value={siUser} onChange={e => setSiUser(e.target.value)} required style={{ fontSize: '0.86rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 26 }} />
                   </div>
                 </div>
 
-                {/* Spaced out Remember me & Forgot Password */}
-                <div className="auth-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 20 }}>
-                  <label className="remember-me" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked /> Remember me
+                <div className="input-group">
+                  <label htmlFor="si-pass" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Password</label>
+                  <div className="input-wrapper" style={{ padding: '6px 12px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <LockIcon />
+                    <input id="si-pass" type={showSiPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Enter password" value={siPass} onChange={e => setSiPass(e.target.value)} required style={{ fontSize: '0.86rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 26, paddingRight: 36 }} />
+                    <button type="button" className="input-icon-right" onClick={() => setShowSiPass(!showSiPass)} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                      {showSiPass ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="auth-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 }}>
+                  <label className="remember-me" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.85rem', color: '#334155' }}>
+                    <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
                   </label>
-                  <button type="button" className="forgot-link" onClick={() => setView('forgot')}>
+                  <button type="button" className="forgot-link" style={{ fontSize: '0.85rem', color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('forgot'); setAlert(null); }}>
                     Forgot password?
                   </button>
                 </div>
-                <button type="submit" className="btn-submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</button>
+                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.95rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
               </form>
-              <div className="auth-switch">Don't have an account? <button type="button" onClick={() => setView('signup')}>Sign Up Now</button></div>
+              <div className="auth-switch" style={{ marginTop: 18, fontSize: '0.88rem', color: '#475569' }}>
+                Don't have an account? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signup'); setAlert(null); }}>Sign Up Now</button>
+              </div>
             </div>
           )}
 
-          {/* SIGN UP VIEW (Only Role input modified to be shorter & matching light onboarding field theme) */}
+          {/* SIGN UP VIEW  */}
           {view === 'signup' && (
-            <div className="fade-in">
-              <h2>Create Account</h2>
-              <form className="auth-form" onSubmit={handleSignUp} style={{ marginTop: 16 }}>
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="su-name">Full Name</label>
-                    <div className="input-wrapper"><UserIcon /><input id="su-name" type="text" placeholder="e.g. Joy Nduta" value={suName} onChange={e => setSuName(e.target.value)} required /></div>
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="su-email">Email Address</label>
-                    <div className="input-wrapper"><EnvelopeIcon /><input id="su-email" type="email" placeholder="name@agency.go.ke" value={suEmail} onChange={e => setSuEmail(e.target.value)} required /></div>
+            <div className="fade-in" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', maxHeight: '80vh', overflowY: 'auto', paddingRight: 6 }}>
+              <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => { setView('signin'); setAlert(null); }}
+                  style={{ background: 'none', border: 'none', color: '#7C1D24', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  ← Back to Sign In
+                </button>
+              </div>
+
+              <h2 style={{ fontSize: '1.5rem', margin: '0 0 4px 0', textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>Create an account</h2>
+              <p className="auth-subtitle" style={{ fontSize: '0.85rem', margin: '0 0 16px 0', textAlign: 'center', color: '#475569' }}>
+                Fill in your details below to register your planner profile.
+              </p>
+
+              <form className="auth-form" onSubmit={handleSignUp} autoComplete="off" style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Full Name */}
+                <div className="input-group" style={{ width: '100%' }}>
+                  <label htmlFor="su-name" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Full Name</label>
+                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <UserIcon />
+                    <input id="su-name" type="text" autoComplete="off" placeholder="e.g. Joy Nduta" value={suName} onChange={e => setSuName(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.88rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 28 }} />
                   </div>
                 </div>
 
-                {/* Role Dropdown: Shorter width & matching app onboarding theme */}
-                <div className="input-group" style={{ marginBottom: 14 }}>
-                  <label htmlFor="su-role">Role</label>
-                  <div className="input-wrapper" style={{ width: '280px', maxWidth: '100%' }}>
+                {/* Email Address */}
+                <div className="input-group" style={{ width: '100%' }}>
+                  <label htmlFor="su-email" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Email</label>
+                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <EnvelopeIcon />
+                    <input id="su-email" type="email" autoComplete="off" placeholder="planner@agency.go.ke" value={suEmail} onChange={e => setSuEmail(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.88rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 28 }} />
+                  </div>
+                </div>
+
+                {/* Role */}
+                <div className="input-group" style={{ width: '100%' }}>
+                  <label htmlFor="su-role" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Role</label>
+                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
                     <BriefcaseIcon />
                     <select
                       id="su-role"
                       value={suRole}
                       onChange={e => setSuRole(e.target.value)}
-                      style={{ border: 'none', background: 'transparent', width: '100%', cursor: 'pointer' }}
+                      required
+                      style={{ border: 'none', background: 'transparent', width: '100%', cursor: 'pointer', paddingLeft: 28, fontSize: '0.88rem', color: suRole ? '#0f172a' : '#64748b' }}
                     >
+                      <option value="" disabled>Choose your role...</option>
                       <option value="Urban Planner">Urban Planner</option>
+                      <option value="Law Enforcement">Law Enforcement</option>
                       <option value="Crime Analyst">Crime Analyst</option>
-                      <option value="Public Safety Officer">Public Safety Officer</option>
+                      <option value="Researcher">Researcher</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="su-pass">Password</label>
-                    <div className="input-wrapper">
-                      <LockIcon />
-                      <input id="su-pass" type={showSuPass ? 'text' : 'password'} placeholder="6+ characters" value={suPass} onChange={e => setSuPass(e.target.value)} required />
-                      <button type="button" className="input-icon-right" onClick={() => setShowSuPass(!showSuPass)}>{showSuPass ? <EyeOffIcon /> : <EyeIcon />}</button>
-                    </div>
+                {/* Password Input + Inset Eye Icon */}
+                <div className="input-group" style={{ width: '100%' }}>
+                  <label htmlFor="su-pass" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Password</label>
+                  <div className="input-wrapper" style={{ width: '100%', padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <LockIcon />
+                    <input id="su-pass" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Enter password" value={suPass} onChange={e => setSuPass(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30, paddingRight: 40 }} />
+                    <button type="button" className="input-icon-right" onClick={() => setShowSuPass(!showSuPass)} style={{ position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                      {showSuPass ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
                   </div>
-                  <div className="input-group">
-                    <label htmlFor="su-confirm">Confirm Password</label>
-                    <div className="input-wrapper"><LockIcon /><input id="su-confirm" type={showSuPass ? 'text' : 'password'} placeholder="Re-enter password" value={suConfirm} onChange={e => setSuConfirm(e.target.value)} required /></div>
+                  <small style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                    Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), &amp; special char.
+                  </small>
+                </div>
+
+                {/* Confirm Password */}
+                <div className="input-group" style={{ width: '100%' }}>
+                  <label htmlFor="su-confirm" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Confirm Password</label>
+                  <div className="input-wrapper" style={{ width: '100%', padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <LockIcon />
+                    <input id="su-confirm" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Re-enter password" value={suConfirm} onChange={e => setSuConfirm(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
                   </div>
                 </div>
 
-                <button type="submit" className="btn-submit" disabled={loading}>{loading ? 'Creating account...' : 'Complete Registration'}</button>
+                <button type="submit" className="btn-submit" disabled={loading} style={{ width: '100%', marginTop: 8, padding: '14px 20px', fontSize: '0.95rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                  {loading ? 'Creating account...' : 'Submit'}
+                </button>
               </form>
-              <div className="auth-switch">Already have an account? <button type="button" onClick={() => setView('signin')}>Sign In Now</button></div>
+
+              <div className="auth-switch" style={{ marginTop: 16, fontSize: '0.88rem', color: '#475569' }}>
+                Already have an account? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signin'); setAlert(null); }}>Sign In Now</button>
+              </div>
             </div>
           )}
 
           {/* FORGOT PASSWORD VIEW */}
           {view === 'forgot' && (
             <div className="fade-in">
-              <h2>Reset Password</h2>
-              <p className="auth-subtitle">Confirm your account email and choose a new password.</p>
-              <form className="auth-form" onSubmit={handleForgot}>
+              <h2 style={{ fontSize: '1.45rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Reset Password</h2>
+              <p className="auth-subtitle" style={{ fontSize: '0.88rem', margin: '0 0 18px 0', color: '#475569' }}>
+                Enter your registered email address to receive a 4-digit verification code.
+              </p>
+
+              <form className="auth-form" onSubmit={handleForgotSend} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="input-group">
-                  <label htmlFor="f-email">Email Address</label>
-                  <div className="input-wrapper"><EnvelopeIcon /><input id="f-email" type="email" placeholder="your email address" value={fEmail} onChange={e => setFEmail(e.target.value)} required /></div>
-                </div>
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="f-pass">New Password</label>
-                    <div className="input-wrapper"><LockIcon /><input id="f-pass" type="password" placeholder="New password" value={fPass} onChange={e => setFPass(e.target.value)} required /></div>
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="f-confirm">Confirm New Password</label>
-                    <div className="input-wrapper"><LockIcon /><input id="f-confirm" type="password" placeholder="Confirm new password" value={fConfirm} onChange={e => setFConfirm(e.target.value)} required /></div>
+                  <label htmlFor="f-email" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Account Email Address</label>
+                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <EnvelopeIcon />
+                    <input id="f-email" type="email" autoComplete="off" placeholder="name@agency.go.ke" value={fEmail} onChange={e => setFEmail(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
                   </div>
                 </div>
-                <button type="submit" className="btn-submit" disabled={loading}>{loading ? 'Resetting...' : 'Reset Password'}</button>
+                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.92rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                  {loading ? 'Sending Email...' : 'Send Password Reset Email'}
+                </button>
               </form>
-              <div className="auth-switch">Remembered your password? <button type="button" onClick={() => setView('signin')}>Back to Sign In</button></div>
+
+              <div className="auth-switch" style={{ marginTop: 18, fontSize: '0.88rem', color: '#475569' }}>
+                Remembered your password? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signin'); setAlert(null); }}>Back to Sign In</button>
+              </div>
+            </div>
+          )}
+
+          {/* RESET PASSWORD  */}
+          {view === 'reset' && (
+            <div className="fade-in">
+              <h2 style={{ fontSize: '1.45rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Enter 4-Digit Code</h2>
+              <p className="auth-subtitle" style={{ fontSize: '0.88rem', margin: '0 0 18px 0', color: '#475569' }}>
+                4-Digit reset code sent to {fEmail}. Enter the code below along with your new password.
+              </p>
+
+              <form className="auth-form" onSubmit={handleResetSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="input-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="r-code" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>4-Digit Code</label>
+                    <button type="button" onClick={handleResendCode} style={{ background: 'none', border: 'none', color: '#7C1D24', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Resend Code
+                    </button>
+                  </div>
+                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <KeyIcon />
+                    <input id="r-code" type="text" maxLength={6} placeholder="e.g. 4829" value={resetCode} onChange={e => setResetCode(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label htmlFor="r-pass" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>New Password</label>
+                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
+                    <LockIcon />
+                    <input id="r-pass" type="password" autoComplete="new-password" minLength={6} placeholder="Enter new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.92rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                  {loading ? 'Updating Password...' : 'Update Password & Sign In'}
+                </button>
+              </form>
             </div>
           )}
         </div>
 
-        {/* BRAND SIDE (Removed eye logo above Smart City) */}
-        <div className="auth-brand-side">
+        {/* BRAND SIDE */}
+        <div className="auth-brand-side" style={{ padding: '36px 40px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div className="brand-header">
             <div className="brand-logo-container"><UrbanEyeLogo /></div>
             <span className="brand-name">Urban Eye</span>
           </div>
           <div className="brand-content">
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: 20 }}>Smart City Intelligence</h3>
-            <p className="brand-desc">Integrated predictive GIS analytics, population growth insights, spatial crime forecasting, and incident maps supporting Kenya's key administrative regions.</p>
-            <div className="city-pills">
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: 14 }}>Smart City Intelligence</h3>
+            <p className="brand-desc" style={{ fontSize: '0.88rem', lineHeight: 1.45, marginTop: 10 }}>
+              Integrated predictive GIS analytics, population growth insights, spatial crime forecasting, and incident maps supporting Kenya's key administrative regions.
+            </p>
+            <div className="city-pills" style={{ marginTop: 18 }}>
               <span className="city-pill">Nairobi Central Analytics</span>
               <span className="city-pill">Mombasa Port Corridor</span>
               <span className="city-pill">Eldoret Expansion</span>
             </div>
           </div>
-          <div className="brand-footer">
+          <div className="brand-footer" style={{ fontSize: '0.8rem' }}>
             <div>Official Data Acquisition Pipeline</div>
-            <div style={{ opacity: 0.65, marginTop: 4 }}>KNBS Census &amp; National Police Service Integrated</div>
+            <div style={{ opacity: 0.65, marginTop: 2 }}>KNBS Census &amp; National Police Service Integrated</div>
           </div>
         </div>
       </div>

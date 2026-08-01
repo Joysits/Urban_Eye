@@ -184,7 +184,7 @@ p { margin-top: 0; }
 /* ── Auth Card (split panel) ── */
 .auth-card {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 0.95fr 1.05fr;
   width: 100%;
   max-width: 940px;
   min-height: 570px;
@@ -311,7 +311,7 @@ p { margin-top: 0; }
 /* ── Auth meta ── */
 .auth-card {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 0.95fr 1.05fr;
   width: 100%;
   max-width: 940px;
   min-height: 570px;
@@ -4677,4 +4677,90 @@ select option {
 
 .ref-switch-reports-btn:hover {
   background: rgba(248, 113, 113, 0.12);
+}
+
+/* ── LIGHT MODE ACCESSIBILITY THEME OVERRIDES (ALL PAGES) ── */
+.theme-light {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.theme-light .sidebar-skyline-glass {
+  background: #ffffff !important;
+  border-right: 1px solid #cbd5e1 !important;
+}
+
+.theme-light .brand-skyline-title,
+.theme-light .home-skyline-title,
+.theme-light h1, .theme-light h2, .theme-light h3, .theme-light h4, .theme-light h5 {
+  color: #0f172a !important;
+}
+
+.theme-light .user-skyline-card {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.theme-light .user-skyline-name {
+  color: #0f172a !important;
+}
+.theme-light .user-skyline-role {
+  color: #64748b !important;
+}
+
+.theme-light .nav-skyline-btn {
+  color: #334155 !important;
+}
+.theme-light .nav-skyline-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+.theme-light .nav-skyline-active {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+}
+
+/* Light mode collapse toggle & theme toggle buttons */
+.theme-light .sidebar-collapse-toggle,
+.theme-light .sidebar-theme-toggle {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light .sidebar-collapse-toggle:hover,
+.theme-light .sidebar-theme-toggle:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+
+.theme-light .home-skyline-topbar,
+.theme-light .home-skyline-hero,
+.theme-light .skyline-action-card,
+.theme-light .comp-card,
+.theme-light .comp-trend-section {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+.theme-light .hero-skyline-headline,
+.theme-light .skyline-card-category,
+.theme-light .comp-card-title {
+  color: #0f172a !important;
+}
+
+.theme-light .hero-skyline-body,
+.theme-light .skyline-card-desc,
+.theme-light .comp-subtitle {
+  color: #475569 !important;
+}
+
+.theme-light select,
+.theme-light input,
+.theme-light textarea {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #94a3b8 !important;
 }

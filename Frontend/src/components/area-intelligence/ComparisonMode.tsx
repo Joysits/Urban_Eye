@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { AnalysisData, Zone } from '../../types';
 import RiskScoreRing from './RiskScoreRing';
+import type { ComparisonReportData } from '../../utils/reportExporter';
 
 interface Props {
   zoneA?: AnalysisData | null;
@@ -18,6 +19,7 @@ interface Props {
   onZoneBChange?: (id: string) => void;
   city: string;
   loading: boolean;
+  onShowToast?: (msg: string) => void;
 }
 
 function authHeaders() {
@@ -143,7 +145,7 @@ function ZoneCard({ data, label, colorClass }: {
 export default function ComparisonMode({
   zoneA, dataA, zoneB, dataB, zones, selectedZoneA, zoneAId,
   selectedZoneB, zoneBId, onSelectZoneA, onZoneAChange,
-  onSelectZoneB, onZoneBChange, city, loading,
+  onSelectZoneB, onZoneBChange, city, loading, onShowToast,
 }: Props) {
   const activeZoneAData = zoneA ?? dataA ?? null;
   const activeZoneBData = zoneB ?? dataB ?? null;
@@ -153,6 +155,8 @@ export default function ComparisonMode({
 
   const setA = onSelectZoneA ?? onZoneAChange;
   const setB = onSelectZoneB ?? onZoneBChange;
+
+  const [savedAlert, setSavedAlert] = useState<string | null>(null);
 
   // Fetch trend data for both zones
   const [trendA, setTrendA] = useState<{ month: string; total: number }[]>([]);
@@ -175,6 +179,44 @@ export default function ComparisonMode({
   }, [selB, city]);
 
   const maxTrend = Math.max(...trendA.map(m => m.total), ...trendB.map(m => m.total), 1);
+
+  const handleSaveComparison = () => {
+    if (!activeZoneAData || !activeZoneBData) {
+      setSavedAlert('Please select both Zone A and Zone B before saving.');
+      setTimeout(() => setSavedAlert(null), 4000);
+      return;
+    }
+
+    const item: ComparisonReportData = {
+      id: `comp_${Date.now()}`,
+      city,
+      created_at: new Date().toISOString(),
+      zoneA_name: activeZoneAData.zone_name,
+      zoneA_risk: activeZoneAData.risk_score,
+      zoneA_incidents: activeZoneAData.total_incidents,
+      zoneA_density: activeZoneAData.population_info?.density ?? 0,
+      zoneB_name: activeZoneBData.zone_name,
+      zoneB_risk: activeZoneBData.risk_score,
+      zoneB_incidents: activeZoneBData.total_incidents,
+      zoneB_density: activeZoneBData.population_info?.density ?? 0,
+      risk_diff: (activeZoneAData.risk_score ?? 0) - (activeZoneBData.risk_score ?? 0),
+      incidents_diff: (activeZoneAData.total_incidents ?? 0) - (activeZoneBData.total_incidents ?? 0),
+      density_diff: (activeZoneAData.population_info?.density ?? 0) - (activeZoneBData.population_info?.density ?? 0),
+    };
+
+    try {
+      const savedUser = localStorage.getItem('user');
+      const userKey = savedUser ? (JSON.parse(savedUser).email || 'guest').toLowerCase() : 'guest';
+      const existing = JSON.parse(localStorage.getItem(`saved_zone_comparisons_${userKey}`) || '[]');
+      const updated = [item, ...existing.filter((e: ComparisonReportData) => e.id !== item.id).slice(0, 9)];
+      localStorage.setItem(`saved_zone_comparisons_${userKey}`, JSON.stringify(updated));
+      setSavedAlert(`Saved comparison (${activeZoneAData.zone_name} vs ${activeZoneBData.zone_name}) to Report Generator!`);
+      onShowToast?.("Comparison Saved!");
+      setTimeout(() => setSavedAlert(null), 4000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="comparison-mode fade-in">
@@ -222,6 +264,34 @@ export default function ComparisonMode({
               <Delta a={activeZoneAData?.population_info?.density ?? null}               b={activeZoneBData?.population_info?.density ?? null}               label="Density /km²" />
               <Delta a={activeZoneAData?.population_info?.growth_rate ?? null}           b={activeZoneBData?.population_info?.growth_rate ?? null}           label="Growth %" higherIsBetter />
               <Delta a={activeZoneAData?.population_info?.total_population ?? null}      b={activeZoneBData?.population_info?.total_population ?? null}      label="Population" higherIsBetter />
+
+              <button
+                type="button"
+                onClick={handleSaveComparison}
+                style={{
+                  marginTop: 16,
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'linear-gradient(135deg, #e65c5c, #b91c1c)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  letterSpacing: '0.5px',
+                  boxShadow: '0 4px 12px rgba(230, 92, 92, 0.3)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                💾 Save Comparison to Report
+              </button>
+
+              {savedAlert && (
+                <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#68d391', fontWeight: 600, textAlign: 'center' }}>
+                  {savedAlert}
+                </div>
+              )}
             </div>
 
             <ZoneCard data={activeZoneBData} label="ZONE B" colorClass="b" />

@@ -3,41 +3,39 @@ import AuthScreen from "./components/auth/AuthScreen";
 import Dashboard from "./components/dashboard/Dashboard";
 import type { User } from "./types";
 
-// Global 401 handler — auto logout if token expires
-const originalFetch = window.fetch;
-window.fetch = async (...args) => {
-  const response = await originalFetch(...args);
-  if (response.status === 401) {
-    const url = typeof args[0] === "string" ? args[0] : "";
-    // Only force logout on API calls, not auth endpoints
-    if (url.includes("/api/") && !url.includes("/api/auth/")) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.reload();
-    }
-  }
-  return response;
-};
-
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('app_theme') as 'dark' | 'light') || 'dark';
+  });
 
-  // Restore session on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    const savedToken = localStorage.getItem("token");
-    if (savedUser && savedToken) {
-      const raw = JSON.parse(savedUser);
-      // Normalize old session format that may lack name/city/role
-      const user: User = {
-        name: raw.name || raw.username || raw.email || "User",
-        email: raw.email || raw.username || "",
-        city: raw.city || raw.profile?.focus_city || "Nairobi",
-        role: raw.role || raw.profile?.agency_role || "Urban Planner",
-      };
-      setCurrentUser(user);
-      setIsAuthenticated(true);
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // Restore session on mount (check sessionStorage first, then localStorage if Remember Me was checked)
+  useEffect(() => {
+    const sessionUser = sessionStorage.getItem("user") || localStorage.getItem("user");
+    const sessionToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (sessionUser && sessionToken) {
+      try {
+        const raw = JSON.parse(sessionUser);
+        const user: User = {
+          name: raw.name || raw.username || raw.email || "User",
+          email: raw.email || raw.username || "",
+          city: raw.city || raw.profile?.focus_city || "Nairobi",
+          role: raw.role || raw.profile?.agency_role || "Urban Planner",
+        };
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, []);
 
@@ -47,8 +45,8 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    const token = localStorage.getItem("token");
-    if (token) {
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (token && token !== 'local_db_token') {
       try {
         await fetch("/api/auth/logout/", {
           method: "POST",
@@ -56,6 +54,8 @@ export default function App() {
         });
       } catch (_) {}
     }
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setCurrentUser(null);
@@ -66,5 +66,5 @@ export default function App() {
     return <AuthScreen onAuthenticated={handleAuthenticated} />;
   }
 
-  return <Dashboard currentUser={currentUser!} onLogout={handleLogout} />;
+  return <Dashboard currentUser={currentUser!} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />;
 }

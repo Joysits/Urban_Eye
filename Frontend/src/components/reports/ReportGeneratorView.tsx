@@ -1,197 +1,199 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../../types';
-import { downloadPdfReport, ReportData } from '../../utils/reportExporter';
+import { downloadPdfReport, downloadComparisonPdfReport, ReportData, ComparisonReportData } from '../../utils/reportExporter';
 
 interface Props {
   currentUser: User;
 }
 
 export default function ReportGeneratorView({ currentUser }: Props) {
-  const [selectedCity, setSelectedCity] = useState(currentUser.city || 'Nairobi');
-  const [downloading, setDownloading] = useState(false);
+  const [savedComparisons, setSavedComparisons] = useState<ComparisonReportData[]>([]);
+  const [savedProposals, setSavedProposals] = useState<any[]>([]);
 
-  const areaReportData: ReportData = {
-    title: `${selectedCity} Area Intelligence & Security Assessment Report`,
-    city: selectedCity,
-    focus: 'Area Analysis',
-    created_at: new Date().toISOString(),
-    summary: `=== AREA INTELLIGENCE EXECUTIVE ASSESSMENT ===\nLocation: ${selectedCity} City Grid\nDate: ${new Date().toLocaleDateString()}\n\nKey Findings:\n- Real-time crime spatial analysis highlights primary incident clustering along transit hubs and main commercial intersections.\n- Incident breakdown: Theft (44.2%), Traffic & Mobility Disruptions (26.1%), Assault (15.8%), Burglary (13.9%).\n- Major physical infrastructure accessibility is verified active across all zones in ${selectedCity}.\n- Substation power grid and municipal water services are connected and operational.`,
-    risk_score: selectedCity === 'Nairobi' ? 56 : selectedCity === 'Mombasa' ? 48 : 38,
-    crime_breakdown: [
-      { category: 'Theft', count: selectedCity === 'Nairobi' ? 1208 : selectedCity === 'Mombasa' ? 540 : 284 },
-      { category: 'Traffic & Mobility Disruptions', count: selectedCity === 'Nairobi' ? 754 : selectedCity === 'Mombasa' ? 320 : 160 },
-      { category: 'Assault', count: selectedCity === 'Nairobi' ? 396 : selectedCity === 'Mombasa' ? 190 : 85 },
-      { category: 'Burglary', count: selectedCity === 'Nairobi' ? 374 : selectedCity === 'Mombasa' ? 140 : 62 },
-    ],
-    infrastructure_summary: [
-      { infra_type: 'Hospitals', count: 6 },
-      { infra_type: 'Schools', count: 14 },
-      { infra_type: 'Railways & Stations', count: 2 },
-      { infra_type: 'Major Roads & Highways', count: 8 },
-      { infra_type: 'Churches & Places of Worship', count: 12 },
-    ],
+  const userKey = (currentUser.email || 'guest').toLowerCase();
+
+  useEffect(() => {
+    try {
+      const storedComp = localStorage.getItem(`saved_zone_comparisons_${userKey}`);
+      if (storedComp) setSavedComparisons(JSON.parse(storedComp));
+      else setSavedComparisons([]);
+
+      const storedProp = localStorage.getItem(`saved_planning_proposals_${userKey}`);
+      if (storedProp) setSavedProposals(JSON.parse(storedProp));
+      else setSavedProposals([]);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [userKey]);
+
+  const handleDeleteComparison = (id: string) => {
+    const updated = savedComparisons.filter(c => c.id !== id);
+    setSavedComparisons(updated);
+    localStorage.setItem(`saved_zone_comparisons_${userKey}`, JSON.stringify(updated));
   };
 
-  const devReportData: ReportData = {
-    title: `${selectedCity} Development Planning & Spatial Impact Proposal`,
-    city: selectedCity,
-    focus: 'Development Planning',
-    created_at: new Date().toISOString(),
-    summary: `=== DEVELOPMENT PLANNING EXECUTIVE PROPOSAL ===\nLocation: ${selectedCity} Urban Zone\nDate: ${new Date().toLocaleDateString()}\n\nProposal Simulation Summary:\n- Project viability & success score is rated strong based on local purchasing power and population catchment.\n- Land valuation index in ${selectedCity} estimated between KES 25M to KES 140M per Acre depending on zone density.\n- Traffic flow impact indicates manageable road network load with light peak-hour congestion.\n- Multi-phase roadmap spans 24 months from site survey to official facility commissioning.`,
-    risk_score: selectedCity === 'Nairobi' ? 88 : selectedCity === 'Mombasa' ? 84 : 89,
-    infrastructure_summary: [
-      { infra_type: 'Commercial Centers', count: 4 },
-      { infra_type: 'Feeder Access Roads', count: 6 },
-      { infra_type: 'Public Transit Hubs', count: 2 },
-    ],
+  const handleDeleteProposal = (id: any) => {
+    const updated = savedProposals.filter(p => p.id !== id);
+    setSavedProposals(updated);
+    localStorage.setItem(`saved_planning_proposals_${userKey}`, JSON.stringify(updated));
   };
 
-  const handleDownloadAreaReport = () => {
-    downloadPdfReport(areaReportData);
+  const handleClearAllSaved = () => {
+    localStorage.removeItem(`saved_zone_comparisons_${userKey}`);
+    localStorage.removeItem(`saved_planning_proposals_${userKey}`);
+    setSavedComparisons([]);
+    setSavedProposals([]);
   };
 
-  const handleDownloadDevReport = () => {
-    downloadPdfReport(devReportData);
+  const handleDownloadProposalPdf = (prop: any) => {
+    const report: ReportData = {
+      title: prop.title || 'Development Proposal Report',
+      city: prop.city || currentUser.city || 'Nairobi',
+      focus: prop.project_type || 'Development Proposal',
+      created_at: prop.created_at,
+      summary: prop.summary || prop.planner_notes || 'Official Development Planning Proposal Document.',
+      risk_score: prop.impact?.success_score || prop.impact?.overallScore || 85,
+    };
+    downloadPdfReport(report);
   };
 
-  const handleDownloadBothReports = async () => {
-    setDownloading(true);
-    downloadPdfReport(areaReportData);
-    setTimeout(() => {
-      downloadPdfReport(devReportData);
-      setDownloading(false);
-    }, 1000);
-  };
+  const totalSaved = savedComparisons.length + savedProposals.length;
 
   return (
-    <div className="reports-page-skyline fade-in" style={{ padding: '24px 32px', fontFamily: 'monospace, sans-serif' }}>
-      {/* Horizontal Top Header Bar & Title */}
-      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="reports-page-skyline fade-in" style={{ padding: '20px 24px', fontFamily: 'monospace, sans-serif' }}>
+      {/* Horizontal Top Header Bar */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 4px 0', color: '#fff', fontFamily: 'sans-serif' }}>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 2px 0', color: '#fff', fontFamily: 'sans-serif' }}>
             Report Generator
           </h1>
           <span style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            {selectedCity.toUpperCase()} • EXECUTIVE URBAN INTELLIGENCE & PLANNING REPORTS
+            EXECUTIVE URBAN INTELLIGENCE &amp; SAVED PLANNING PROPOSALS
           </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <label style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Select City:</label>
-          <select
-            value={selectedCity}
-            onChange={e => setSelectedCity(e.target.value)}
-            style={{ padding: '8px 14px', background: '#0e1117', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: '0.85rem', fontFamily: 'sans-serif' }}
-          >
-            <option>Nairobi</option>
-            <option>Mombasa</option>
-            <option>Eldoret</option>
-          </select>
         </div>
       </div>
 
-      {/* Reports Options Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
-        {/* Card 1: Area Analysis Report */}
-        <div style={{ background: '#0e1117', padding: 24, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ color: '#e65c5c', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-              AREA ANALYSIS REPORT
-            </span>
-            <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: '0 0 10px 0', fontWeight: 700, fontFamily: 'sans-serif' }}>
-              {selectedCity} Area Intelligence & Incident Report
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.4, margin: '0 0 16px 0', fontFamily: 'sans-serif' }}>
-              Comprehensive real-time report containing risk scores, incident breakdown counts, severity feed, and major physical infrastructure summary.
-            </p>
-          </div>
-          <button
-            onClick={handleDownloadAreaReport}
-            style={{
-              width: '100%',
-              background: '#e65c5c',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '12px 16px',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(230, 92, 92, 0.3)',
-            }}
-          >
-            DOWNLOAD AREA ANALYSIS REPORT
-          </button>
+      {/* SAVED PROPOSALS & REPORTS SECTION (100% Empty Default for New Users) */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h2 style={{ fontSize: '1.15rem', color: '#fff', margin: 0, fontFamily: 'sans-serif', fontWeight: 700 }}>
+            Saved Proposals &amp; Reports ({totalSaved})
+          </h2>
+          {totalSaved > 0 && (
+            <button
+              onClick={handleClearAllSaved}
+              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'sans-serif', fontWeight: 600 }}
+            >
+              Clear All Saved
+            </button>
+          )}
         </div>
 
-        {/* Card 2: Development Planning Report */}
-        <div style={{ background: '#0e1117', padding: 24, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ color: '#10b981', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-              DEVELOPMENT PLANNING REPORT
-            </span>
-            <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: '0 0 10px 0', fontWeight: 700, fontFamily: 'sans-serif' }}>
-              {selectedCity} Spatial Impact & Proposal Brief
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.4, margin: '0 0 16px 0', fontFamily: 'sans-serif' }}>
-              Official proposal document detailing project success ratings, land market price per acre, traffic impact, catchment population shift, and project phasing.
-            </p>
+        {totalSaved === 0 ? (
+          <div style={{ background: '#0e1117', padding: '36px 24px', borderRadius: 12, border: '1px dashed rgba(255,255,255,0.15)', textAlign: 'center', color: '#94a3b8', fontFamily: 'sans-serif', fontSize: '0.88rem', lineHeight: 1.5 }}>
+            No saved proposals or reports yet. When you save a draft proposal in <strong>Development Planning</strong> or save a comparison in <strong>Area Analysis</strong>, it will automatically appear here for instant PDF download and management.
           </div>
-          <button
-            onClick={handleDownloadDevReport}
-            style={{
-              width: '100%',
-              background: 'transparent',
-              color: '#e65c5c',
-              border: '1px solid #e65c5c',
-              borderRadius: 6,
-              padding: '12px 16px',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-            }}
-          >
-            DOWNLOAD PLANNING REPORT
-          </button>
-        </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            {/* Render Saved Planning Proposals */}
+            {savedProposals.map(prop => (
+              <div key={prop.id} style={{ background: '#0e1117', padding: 16, borderRadius: 10, border: '1px solid rgba(230, 92, 92, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ color: '#e65c5c', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
+                      SAVED DRAFT PROPOSAL ({prop.city})
+                    </span>
+                    <button
+                      onClick={() => handleDeleteProposal(prop.id)}
+                      title="Delete Saved Proposal"
+                      style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <h4 style={{ fontSize: '1rem', color: '#fff', margin: '0 0 6px 0', fontFamily: 'sans-serif', fontWeight: 700 }}>
+                    {prop.title}
+                  </h4>
+                  <div style={{ color: '#94a3b8', fontSize: '0.78rem', lineHeight: 1.4, marginBottom: 12, fontFamily: 'sans-serif' }}>
+                    <div><strong>Category:</strong> {prop.project_type}</div>
+                    <div><strong>Stage:</strong> {prop.stage}</div>
+                    <div><strong>Location:</strong> {prop.location_name || prop.city}</div>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: 4 }}>Saved: {new Date(prop.created_at || Date.now()).toLocaleString()}</small>
+                  </div>
+                </div>
 
-        {/* Card 3: Both Reports */}
-        <div style={{ background: '#0e1117', padding: 24, borderRadius: 12, border: '1px solid rgba(230, 92, 92, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ color: '#f59e0b', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-              COMBINED INTELLIGENCE PACKAGE
-            </span>
-            <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: '0 0 10px 0', fontWeight: 700, fontFamily: 'sans-serif' }}>
-              Download Both Reports ({selectedCity})
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.4, margin: '0 0 16px 0', fontFamily: 'sans-serif' }}>
-              Export both the Area Intelligence Assessment and Development Planning Proposal PDFs simultaneously for complete municipal records.
-            </p>
+                <button
+                  onClick={() => handleDownloadProposalPdf(prop)}
+                  style={{
+                    width: '100%',
+                    background: '#a81c1c',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    letterSpacing: '0.5px',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(168, 28, 28, 0.3)',
+                  }}
+                >
+                  DOWNLOAD PROPOSAL REPORT (PDF)
+                </button>
+              </div>
+            ))}
+
+            {/* Render Saved Zone Comparisons */}
+            {savedComparisons.map(comp => (
+              <div key={comp.id} style={{ background: '#0e1117', padding: 16, borderRadius: 10, border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ color: '#3b82f6', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
+                      ZONE COMPARATIVE REPORT ({comp.city})
+                    </span>
+                    <button
+                      onClick={() => handleDeleteComparison(comp.id)}
+                      title="Delete Saved Comparison"
+                      style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <h4 style={{ fontSize: '1rem', color: '#fff', margin: '0 0 6px 0', fontFamily: 'sans-serif', fontWeight: 700 }}>
+                    {comp.zoneA_name} vs {comp.zoneB_name}
+                  </h4>
+                  <div style={{ color: '#94a3b8', fontSize: '0.78rem', lineHeight: 1.4, marginBottom: 12, fontFamily: 'sans-serif' }}>
+                    <div><strong>Risk Score Delta:</strong> {comp.risk_diff > 0 ? `+${comp.risk_diff}` : comp.risk_diff} pts</div>
+                    <div><strong>Incidents Delta:</strong> {comp.incidents_diff > 0 ? `+${comp.incidents_diff}` : comp.incidents_diff} incidents</div>
+                    <div><strong>Density Delta:</strong> {comp.density_diff > 0 ? `+${comp.density_diff}` : comp.density_diff} /km²</div>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: 4 }}>Saved: {new Date(comp.created_at).toLocaleString()}</small>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => downloadComparisonPdfReport(comp)}
+                  style={{
+                    width: '100%',
+                    background: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    letterSpacing: '0.5px',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
+                  }}
+                >
+                  DOWNLOAD COMPARISON REPORT (PDF)
+                </button>
+              </div>
+            ))}
           </div>
-          <button
-            onClick={handleDownloadBothReports}
-            disabled={downloading}
-            style={{
-              width: '100%',
-              background: '#e65c5c',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '12px 16px',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(230, 92, 92, 0.4)',
-            }}
-          >
-            {downloading ? 'GENERATING BOTH PDFS…' : 'DOWNLOAD BOTH REPORTS'}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
