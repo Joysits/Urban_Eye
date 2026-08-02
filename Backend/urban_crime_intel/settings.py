@@ -6,9 +6,6 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# -----------------------------------------------------------------------------
-# GISInternals / OSGeo4W GDAL & GEOS Configuration (Required for Windows & GeoDjango)
-# -----------------------------------------------------------------------------
 if os.name == 'nt':
     # 1. Try GISInternals first (default install directory)
     GISINTERNALS_DIR = r'C:\Program Files\GDAL'
@@ -110,15 +107,28 @@ ASGI_APPLICATION = "urban_crime_intel.asgi.application"
 # -----------------------------------------------------------------------------
 # Database Configuration
 # -----------------------------------------------------------------------------
-if DATABASE_TYPE == "postgis":
+import socket
+
+def is_port_open(host, port):
+    try:
+        with socket.create_connection((host, int(port)), timeout=1):
+            return True
+    except Exception:
+        return False
+
+pg_host = os.getenv("POSTGRES_HOST", "localhost")
+pg_port = os.getenv("POSTGRES_PORT", "5433")
+
+if DATABASE_TYPE in {"postgis", "postgres", "postgresql"} and (is_port_open(pg_host, pg_port) or is_port_open(pg_host, 5432)):
+    active_port = pg_port if is_port_open(pg_host, pg_port) else "5432"
     DATABASES = {
         "default": {
             "ENGINE": "django.contrib.gis.db.backends.postgis",
             "NAME": os.getenv("POSTGRES_DB", "urban_crime_intel"),
-            "USER": os.getenv("POSTGRES_USER", "urban_user"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-this-password"),
-            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
-            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+            "USER": os.getenv("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "Joy"),
+            "HOST": pg_host,
+            "PORT": active_port,
         }
     }
 else:
@@ -158,3 +168,16 @@ CORS_ALLOWED_ORIGINS = [
     for origin in os.getenv("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
     if origin.strip()
 ]
+
+# Email Configuration
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Urban Eye Support <noreply@urbaneye.co.ke>")
+
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

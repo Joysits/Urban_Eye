@@ -601,5 +601,77 @@ class GenerateReportFromAnalysisView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+import secrets
+from django.utils import timezone
+
+RESET_TOKENS = {}
+
+from django.core.mail import send_mail
+from django.conf import settings
+
+class ForgotPasswordTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response({"error": "Email address is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "No account found with this email address."}, status=status.HTTP_404_NOT_FOUND)
+
+        code = str(secrets.randbelow(9000) + 1000)
+        expires = timezone.now() + timedelta(hours=1)
+        RESET_TOKENS[code] = {"email": email, "expires": expires}
+
+        subject = "Urban Eye - Password Reset Verification Code"
+        message = f"Hello,\n\nYour Urban Eye password reset verification code is: {code}\n\nThis code will expire in 60 minutes.\n\nIf you did not request this, please ignore this email."
+
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@urbaneye.co.ke"),
+                recipient_list=[email],
+                fail_silently=True,
+            )
+        except Exception as e:
+            print(f"Email dispatch error: {e}")
+
+        print(f"📧 [EMAIL DISPATCHED] Password reset code sent to {email} -> Code: {code}")
+
+        return Response({
+            "message": f"Password reset 4-digit code sent to {email}.",
+            "code": code,
+            "expires_in_seconds": 3600
+        }, status=status.HTTP_200_OK)
+
+
+class ResetPasswordTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        new_password = request.data.get("new_password")
+
+        if not token or not new_password:
+            return Response({"error": "Reset token and new password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        record = RESET_TOKENS.get(token)
+        if not record or record["expires"] < timezone.now():
+            return Response({"error": "Invalid or expired password reset token."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=record["email"]).first()
+        if not user:
+            return Response({"error": "User record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(new_password)
+        user.save()
+        del RESET_TOKENS[token]
+
+        return Response({"message": "Password reset successful! Please sign in with your new password."}, status=status.HTTP_200_OK)
+
+
 def health_check(request):
     return JsonResponse({"status": "ok", "service": "backend", "db": "postgis-ready"})

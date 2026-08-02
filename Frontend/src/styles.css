@@ -1,13 +1,9 @@
-/* ============================================================
-   SMART URBAN CRIME INTELLIGENCE SYSTEM — Global Styles
-   Palette: Garnet → Imperial Crimson → Ruby Ash → Ember Rose → Silk Blush
-   ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;600;700;800&display=swap');
 
-/* ── Design Tokens ── */
+
 :root {
-  /* Core palette */
+  
   --garnet:        #4A1E14;
   --crimson:       #7C1D24;
   --ruby:          #A63A3A;
@@ -108,9 +104,7 @@ p { margin-top: 0; }
   100% { background-position: 200% 0; }
 }
 
-/* ======================================================
-   AUTH SCREEN — Nairobi skyline transparent background
-   ====================================================== */
+/* Transparent backdrop for auth screen */
 
 .auth-screen {
   min-height: 100vh;
@@ -124,7 +118,7 @@ p { margin-top: 0; }
   box-sizing: border-box;
 }
 
-/* Nairobi skyline — restored backdrop layer */
+/* Nairobi skyline backdrop layer */
 .auth-screen::before {
   content: "";
   position: absolute;
@@ -181,7 +175,7 @@ p { margin-top: 0; }
   animation: float-slow 22s infinite ease-in-out alternate-reverse;
 }
 
-/* ── Auth Card (split panel) ── */
+/* Auth Card (split panel) */
 .auth-card {
   display: grid;
   grid-template-columns: 0.95fr 1.05fr;

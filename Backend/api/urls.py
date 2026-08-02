@@ -4,6 +4,8 @@ from .views import (
     LoginView,
     LogoutView,
     PasswordResetView,
+    ForgotPasswordTokenView,
+    ResetPasswordTokenView,
     RegisterView,
     UserProfileView,
     ZoneViewSet,
@@ -39,6 +41,8 @@ urlpatterns = [
     path("auth/logout/",         LogoutView.as_view(),        name="auth_logout"),
     path("auth/profile/",        UserProfileView.as_view(),   name="auth_profile"),
     path("auth/password-reset/", PasswordResetView.as_view(), name="auth_password_reset"),
+    path("auth/forgot-password/", ForgotPasswordTokenView.as_view(), name="auth_forgot_password"),
+    path("auth/reset-password/", ResetPasswordTokenView.as_view(), name="auth_reset_password"),
 
     # Area Analysis / Intelligence Aggregation Endpoints
     path("analysis/detail/",                AreaAnalysisDetailView.as_view(),          name="area_analysis_detail"),

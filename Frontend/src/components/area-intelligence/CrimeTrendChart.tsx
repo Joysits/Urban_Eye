@@ -44,7 +44,7 @@ export default function CrimeTrendChart({ data, loading }: Props) {
     );
   }
 
-  // Filter out 'Other' category
+  
   const rawTrend = (data?.trend ?? []).filter(t => t.category !== 'Other');
   const monthTotals = data?.month_totals ?? [];
 
