@@ -21,7 +21,6 @@ from django.contrib.gis.geos import Point, Polygon
 from api.models import Zone, Incident, PopulationData, Infrastructure
 
 # ─── KNBS 2019 Census Baseline & 2024–2026 Projections ─────────────────────
-# Source: Kenya National Bureau of Statistics (KNBS) Sub-County Demographic Estimates & 2024 Projections
 
 ZONES_DATA = {
     "Nairobi": [
@@ -207,7 +206,7 @@ def run():
     print("Urban Eye — KNBS 2019-2026 Database Seeder")
     print("=" * 60)
 
-    # 1. Create / Update Zones
+    
     print("\n[1/4] Seeding Zones...")
     zone_map = {}
     for city, zone_list in ZONES_DATA.items():
@@ -220,7 +219,7 @@ def run():
             )
             zone_map[city][z["name"]] = zone_obj
 
-    # 2. Population Records 2019–2026 (Updated KNBS Projections)
+    # 2. Population Records 2019–2026 
     print("\n[2/4] Seeding Population records (2019–2026 KNBS Projections)...")
     for city, zone_list in ZONES_DATA.items():
         for z in zone_list:

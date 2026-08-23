@@ -30,7 +30,6 @@ from .serializers import (
     ImpactPredictionSerializer
 )
 
-# ─── Auth Views ───────────────────────────────────────────────────────────────
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -162,7 +161,7 @@ class UserProfileView(APIView):
         return Response({"message": "Profile updated successfully.", "user": user_data}, status=status.HTTP_200_OK)
 
 
-# ─── Area Analysis Specialized View ──────────────────────────────────────────
+# Area Analysis Specialized View
 
 class AreaAnalysisDetailView(APIView):
     """
@@ -176,14 +175,13 @@ class AreaAnalysisDetailView(APIView):
         ALLOWED_CITIES = ["Nairobi", "Mombasa", "Eldoret"]
         city = request.query_params.get("city", "Nairobi")
         
-        # Match case-insensitively to allowed list, otherwise default to Nairobi
         matched_city = next((c for c in ALLOWED_CITIES if c.lower() == city.lower()), "Nairobi")
         city = matched_city
         
         zone_id = request.query_params.get("zone_id")
 
         try:
-            # 1. Fetch Zones belonging to this city
+            # 1. Fetch Zones belonging to city
             city_zones = Zone.objects.filter(city__iexact=city)
 
             # 2. Query Incidents
@@ -208,7 +206,7 @@ class AreaAnalysisDetailView(APIView):
 
             incidents_qs = incidents_qs.exclude(category__iexact="Other")
 
-            # 4. Crime & Infrastructure Aggregations
+            # 4. Crime & Infrastructure 
             crime_breakdown = list(
                 incidents_qs.values("category")
                 .annotate(count=Count("id"))
@@ -251,7 +249,7 @@ class AreaAnalysisDetailView(APIView):
                         "growth_rate": round(city_pop["avg_growth"], 2) if city_pop["avg_growth"] else 0
                     }
 
-            # 6. Safely Serialize Recent Incidents
+            # 6.  Recent Incidents
             recent_incidents = []
             try:
                 # Ordering check
@@ -297,7 +295,7 @@ class AreaAnalysisDetailView(APIView):
             }, status=status.HTTP_200_OK)
 
 
-# ─── Spatial Endpoints (Area Analysis & Dev Planning) ─────────────────────────
+#  Spatial Endpoints (Area Analysis & Dev Planning) 
 
 class ZoneViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -395,7 +393,7 @@ class GeneratedReportViewSet(viewsets.ModelViewSet):
         return qs
 
 
-# ─── Crime Trend View ─────────────────────────────────────────────────────────
+#  Crime Trend View 
 
 class CrimeTrendView(APIView):
     """
@@ -433,7 +431,7 @@ class CrimeTrendView(APIView):
                 .order_by("month", "category")
             )
 
-            # Build a clean list of {month, category, count}
+            # a clean list of {month, category, count}
             data = [
                 {
                     "month": row["month"].strftime("%Y-%m") if row["month"] else None,
@@ -469,7 +467,7 @@ class CrimeTrendView(APIView):
             })
 
 
-# ─── Infrastructure Nearby View ────────────────────────────────────────────────
+#  Infrastructure Nearby View
 
 class InfrastructureNearbyView(APIView):
     """
@@ -522,7 +520,7 @@ class InfrastructureNearbyView(APIView):
             })
 
 
-# ─── Generate Report From Area Intelligence ────────────────────────────────────
+#  Report generation From Area Intelligence 
 
 class GenerateReportFromAnalysisView(APIView):
     """
@@ -548,7 +546,7 @@ class GenerateReportFromAnalysisView(APIView):
             except (Zone.DoesNotExist, ValueError):
                 pass
 
-        # Build rich text summary
+        
         lines = [
             f"=== AREA INTELLIGENCE REPORT ===",
             f"Zone: {zone_name}  |  City: {city}",
@@ -606,8 +604,27 @@ from django.utils import timezone
 
 RESET_TOKENS = {}
 
+import logging
+import threading
 from django.core.mail import send_mail
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+def _send_reset_email_async(subject, message, from_email, recipient_list):
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            fail_silently=False,
+        )
+        logger.info(f"📧 [SMTP SUCCESS] Reset email successfully dispatched to {recipient_list}")
+        print(f"📧 [SMTP SUCCESS] Reset code email sent to {recipient_list}")
+    except Exception as e:
+        logger.error(f"❌ [SMTP ERROR] Failed to send email to {recipient_list}: {str(e)}", exc_info=True)
+        print(f"❌ [SMTP ERROR] Email dispatch failed for {recipient_list}: {str(e)}")
 
 class ForgotPasswordTokenView(APIView):
     permission_classes = [AllowAny]
@@ -627,22 +644,20 @@ class ForgotPasswordTokenView(APIView):
 
         subject = "Urban Eye - Password Reset Verification Code"
         message = f"Hello,\n\nYour Urban Eye password reset verification code is: {code}\n\nThis code will expire in 60 minutes.\n\nIf you did not request this, please ignore this email."
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <noreply@urbaneye.co.ke>")
 
-        try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@urbaneye.co.ke"),
-                recipient_list=[email],
-                fail_silently=True,
-            )
-        except Exception as e:
-            print(f"Email dispatch error: {e}")
+        # Dispatch via asynchronous background thread to prevent HTTP request blocking
+        email_thread = threading.Thread(
+            target=_send_reset_email_async,
+            args=(subject, message, from_email, [email])
+        )
+        email_thread.daemon = True
+        email_thread.start()
 
-        print(f"📧 [EMAIL DISPATCHED] Password reset code sent to {email} -> Code: {code}")
+        print(f"🔑 [RESET TOKEN DISPATCHED] Code for {email} -> {code}")
 
         return Response({
-            "message": f"Password reset 4-digit code sent to {email}.",
+            "message": f"Password reset verification code dispatched to {email}.",
             "code": code,
             "expires_in_seconds": 3600
         }, status=status.HTTP_200_OK)

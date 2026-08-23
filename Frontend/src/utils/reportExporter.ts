@@ -19,6 +19,8 @@ export interface ComparisonReportData {
   id: string;
   city: string;
   created_at: string;
+  title?: string;
+  summary?: string;
   zoneA_name: string;
   zoneA_risk: number;
   zoneA_incidents: number;
@@ -175,13 +177,13 @@ export function downloadPdfReport(report: ReportData) {
   doc.text(wrappedSummary, 30, y);
   y += wrappedSummary.length * 13 + 20;
 
-  // Incident Category Breakdown & Temporal Patterns Section
+  // Incident Category Breakdown & Percentage Distribution Section
   if (report.crime_breakdown && report.crime_breakdown.length > 0) {
     if (y > 680) { doc.addPage(); y = 40; }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(20, 24, 33);
-    doc.text('Recent Reported Incidents In the Past 6 Months (Temporal Patterns)', 30, y);
+    doc.text('Incident Distribution (%)', 30, y);
     y += 16;
 
     doc.setFont('helvetica', 'bold');
@@ -189,14 +191,16 @@ export function downloadPdfReport(report: ReportData) {
     doc.setFillColor(240, 242, 245);
     doc.rect(30, y, pageWidth - 60, 20, 'F');
     doc.text('Category', 40, y + 14);
-    doc.text('Incidents', pageWidth - 100, y + 14);
+    doc.text('Percentage Share (%)', pageWidth - 140, y + 14);
     y += 20;
 
+    const totalCount = report.crime_breakdown.reduce((acc, curr) => acc + curr.count, 0);
     doc.setFont('helvetica', 'normal');
     for (const c of report.crime_breakdown) {
       if (y > 750) { doc.addPage(); y = 40; }
+      const pctStr = totalCount > 0 ? `${((c.count / totalCount) * 100).toFixed(1)}%` : '0.0%';
       doc.text(c.category, 40, y + 12);
-      doc.text(String(c.count), pageWidth - 100, y + 12);
+      doc.text(pctStr, pageWidth - 140, y + 12);
       y += 18;
       doc.setDrawColor(240, 242, 245);
       doc.line(30, y, pageWidth - 30, y);
@@ -210,7 +214,7 @@ export function downloadPdfReport(report: ReportData) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(20, 24, 33);
-    doc.text('Major Physical Infrastructure in Your Zone', 30, y);
+    doc.text('Major Physical Infrastructure in Sub-Location', 30, y);
     y += 16;
 
     doc.setFont('helvetica', 'normal');
@@ -266,7 +270,7 @@ export function downloadComparisonPdfReport(comp: ComparisonReportData) {
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('URBAN EYE — ZONE COMPARATIVE REPORT', 30, 35);
+  doc.text('URBAN EYE — SUB-LOCATION COMPARATIVE REPORT', 30, 35);
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -302,7 +306,6 @@ export function downloadComparisonPdfReport(comp: ComparisonReportData) {
 
   const rows = [
     { label: 'Risk Score', a: comp.zoneA_risk, b: comp.zoneB_risk, diff: comp.risk_diff },
-    { label: 'Total Incidents', a: comp.zoneA_incidents, b: comp.zoneB_incidents, diff: comp.incidents_diff },
     { label: 'Population Density', a: `${comp.zoneA_density} /km²`, b: `${comp.zoneB_density} /km²`, diff: comp.density_diff },
   ];
 

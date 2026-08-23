@@ -4,10 +4,12 @@ import type {
   Zone, IncidentPoint,
 } from '../../types';
 import MapPanel from './MapPanel';
-import SummaryPanel, { RecentIncidentsCard } from './SummaryPanel';
+import SummaryPanel from './SummaryPanel';
 import ComparisonMode from './ComparisonMode';
 import CrimeTrendChart from './CrimeTrendChart';
 import { downloadPdfReport } from '../../utils/reportExporter';
+import { calculateCityRiskSeverity, calculateSpatialMLRiskSeverity } from '../../utils/ncrcCrimeData';
+import { OFFICIAL_SUBCOUNTY_POPULATION, KNBS_COUNTY_TOTALS } from '../../data/subCountyPopulation';
 
 const CITY_CENTERS_MAP: Record<string, [number, number]> = {
   Nairobi: [-1.286389, 36.817223],
@@ -15,6 +17,7 @@ const CITY_CENTERS_MAP: Record<string, [number, number]> = {
   Eldoret: [0.514277, 35.26978],
 };
 
+// Comprehensive Official Administrative Zones in Kenya (Nairobi, Mombasa, Eldoret)
 export const OFFICIAL_CITY_ZONES: Record<string, string[]> = {
   Eldoret: [
     'Eldoret CBD', 'Pioneer', 'Langas', 'Huruma', 'Kapseret',
@@ -34,48 +37,11 @@ export const OFFICIAL_CITY_ZONES: Record<string, string[]> = {
   ],
 };
 
-const ZONE_POPULATIONS: Record<string, { pop: number; areaKm2: number }> = {
- // Eldoret zones
-  'Eldoret CBD': { pop: 35000, areaKm2: 4.5 },
-  'Pioneer': { pop: 54200, areaKm2: 11.2 },
-  'Langas': { pop: 78500, areaKm2: 8.4 },
-  'Huruma': { pop: 62100, areaKm2: 7.1 },
-  'Kapseret': { pop: 41000, areaKm2: 24.5 },
-  'Elgon View': { pop: 18400, areaKm2: 14.8 },
-  'Annex': { pop: 48200, areaKm2: 12.0 },
-  'West Indies': { pop: 22100, areaKm2: 6.8 },
-  'Kimumu': { pop: 51000, areaKm2: 15.2 },
-  'Chepkoilel': { pop: 42000, areaKm2: 18.0 },
-  'Maili Nne': { pop: 38000, areaKm2: 9.5 },
-  'Munyaka': { pop: 45000, areaKm2: 7.8 },
-  'Kipkaren': { pop: 31000, areaKm2: 11.0 },
-  'Hawaiian': { pop: 24000, areaKm2: 6.2 },
-  'Sosiani': { pop: 29000, areaKm2: 8.5 },
-
-  // Nairobi Sub-Counties / Wards
-  'CBD (Central)': { pop: 185000, areaKm2: 12.5 },
-  'Westlands': { pop: 118000, areaKm2: 28.0 },
-  'Kilimani': { pop: 104000, areaKm2: 16.2 },
-  'Lavington': { pop: 68000, areaKm2: 18.5 },
-  'Parklands': { pop: 72000, areaKm2: 10.4 },
-  'Kibra': { pop: 285000, areaKm2: 12.1 },
-  'Karen': { pop: 48000, areaKm2: 42.0 },
-  'Langata': { pop: 195000, areaKm2: 38.0 },
-  'Kasarani': { pop: 31000, areaKm2: 86.0 },
-  'Embakasi': { pop: 380000, areaKm2: 92.0 },
-
-  // Mombasa Sub-Counties / Wards
-  'Mombasa Island (Old Town)': { pop: 52000, areaKm2: 6.8 },
-  'Nyali': { pop: 142000, areaKm2: 22.4 },
-  'Likoni': { pop: 215000, areaKm2: 41.0 },
-  'Changamwe': { pop: 168000, areaKm2: 18.2 },
-  'Kisauni': { pop: 290000, areaKm2: 88.0 },
-  'Bamburi': { pop: 125000, areaKm2: 16.5 },
-};
-
 const SEVERITY_WEIGHT: Record<string, number> = {
   Low: 0.3, Moderate: 0.6, High: 1.0, Critical: 1.0,
 };
+
+import type { User } from '../../types';
 
 function authHeaders() {
   const token = localStorage.getItem('token');
@@ -86,13 +52,13 @@ function authHeaders() {
 }
 
 interface Props {
+  currentUser?: User;
   currentCity: string;
   onCityChange?: (city: string) => void;
   onSwitchToReports?: () => void;
-  onShowToast?: (msg: string) => void;
 }
 
-export default function AreaIntelligenceView({ currentCity, onCityChange, onSwitchToReports, onShowToast }: Props) {
+export default function AreaIntelligenceView({ currentUser, currentCity, onCityChange, onSwitchToReports }: Props) {
   const [city, setCity] = useState(currentCity || 'Nairobi');
 
   useEffect(() => {
@@ -213,20 +179,15 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
       .then(r => r.json())
       .then(d => setInfraNearby(d))
       .catch(() => {
+        const infraList = getSubCountyInfrastructureList(activeLocationName || selectedZone || city, city);
         setInfraNearby({
           city,
           radius_km: radiusKm,
-          total: 32,
-          infrastructure: [
-            { type: 'Hospital', count: 6 },
-            { type: 'School', count: 14 },
-            { type: 'Police Station', count: 4 },
-            { type: 'Power Substation', count: 3 },
-            { type: 'Transit Hub', count: 5 },
-          ] as any,
+          total: infraList.reduce((acc, curr) => acc + curr.count, 0),
+          infrastructure: infraList as any,
         });
       });
-  }, [selectionMode, droppedPin, radiusKm, city, selectedZone]);
+  }, [selectionMode, droppedPin, radiusKm, city, selectedZone, activeLocationName]);
 
   // Fetch Incidents for map heat layer
   useEffect(() => {
@@ -267,23 +228,13 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
     if (!compareMode) return;
     setCompLoading(true);
 
-    const fetchSingleZone = async (zId: string) => {
-      if (!zId) return null;
-      const calculated = getCalculatedZoneData(city, zId, null, 5);
-      try {
-        const r = await fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${zId}`, {
-          headers: authHeaders(),
-        });
-        if (r.ok) {
-          const data = await r.json();
-          data.population_info = calculated.population_info;
-          data.risk_score = calculated.risk_score;
-          data.total_incidents = calculated.total_incidents;
-          data.crime_breakdown = calculated.crime_breakdown;
-          return data;
-        }
-      } catch (_) {}
-      return calculated;
+    const fetchSingleZone = (zId: string) => {
+      if (!zId) return Promise.resolve(null);
+      return fetch(`/api/analysis/detail/?city=${encodeURIComponent(city)}&zone_id=${zId}`, {
+        headers: authHeaders(),
+      })
+        .then(r => (r.ok ? r.json() : getCalculatedZoneData(city, zId, null, 5)))
+        .catch(() => getCalculatedZoneData(city, zId, null, 5));
     };
 
     Promise.all([fetchSingleZone(zoneAId), fetchSingleZone(zoneBId)])
@@ -316,42 +267,31 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
     downloadPdfReport(reportObj);
 
     try {
-      const savedUserStr = localStorage.getItem('user') || sessionStorage.getItem('user');
-      const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
-      const userKey = (savedUser?.email || 'guest').toLowerCase();
-      const existingProps = JSON.parse(localStorage.getItem(`saved_planning_proposals_${userKey}`) || '[]');
-      const newReportProposal = {
-        id: Date.now(),
-        title: reportTitle,
-        project_type: 'Area Assessment',
-        city,
-        stage: 'Approved',
-        summary: summaryText,
-        planner_notes: summaryText,
-        location_name: analysisData.zone_name,
-        created_at: new Date().toISOString(),
-        impact: { success_score: analysisData.risk_score },
-      };
-      localStorage.setItem(`saved_planning_proposals_${userKey}`, JSON.stringify([newReportProposal, ...existingProps.filter((p: any) => p.title !== reportTitle)]));
-    } catch (e) {
-      console.error(e);
+      await fetch('/api/reports/generate_from_analysis/', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          city,
+          zone_id: selectedZone ? Number(selectedZone) : null,
+          title: reportTitle,
+          focus: 'safety',
+          summary: summaryText,
+        }),
+      });
+      showToast('PDF downloaded & report saved!', 'success');
+    } catch {
+      showToast('PDF downloaded successfully!', 'success');
+    } finally {
+      setExportLoading(false);
     }
-
-    const toastText = "Report saved successfully!";
-    if (onShowToast) {
-      onShowToast(toastText);
-    } else {
-      showToast(toastText, 'success');
-    }
-    setExportLoading(false);
   };
 
-  // Reverse-geocode dropped pin coordinates to set exact location name
+  // how drop pin drops exact locations
   const handlePinDrop = (lat: number, lng: number) => {
     setDroppedPin({ lat, lng });
     setSelectionMode('pin');
 
-    // Attempt reverse geocoding via Nominatim API
+    // Reverse geocoding via Nominatim API
     fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
       .then(r => r.json())
       .then(d => {
@@ -368,7 +308,7 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
       });
   };
 
-  // Handle Zone Dropdown Change
+  // Handles Zone Dropdown Change
   const handleZoneSelectChange = (zId: string) => {
     setSelectedZone(zId);
     if (!zId) {
@@ -393,46 +333,100 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
   });
 
   return (
-    <div className="area-intel-shell fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="area-intel-shell fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 60 }}>
       {/* ── Control Bar ── */}
-      <div className="intel-control-bar">
-        <div className="intel-controls-left">
-          <div className="intel-control-group">
-            <label>City</label>
+      <div
+        className="intel-control-bar"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 22px',
+          background: '#ffffff',
+          border: '1px solid rgba(124, 29, 36, 0.15)',
+          borderRadius: 16,
+          boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+          {/* Select City */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '0.7rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+              Select City
+            </label>
             <select
               value={city}
               onChange={e => {
                 const val = e.target.value;
+                if (!val) return;
                 setCity(val);
                 setSelectedZone('');
                 setActiveLocationName('');
                 onCityChange?.(val);
               }}
-              className="intel-select"
+              style={{
+                padding: '8px 14px',
+                borderRadius: 8,
+                background: '#ffffff',
+                color: '#7c1d24',
+                border: '1px solid rgba(124, 29, 36, 0.25)',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
             >
-              <option>Nairobi</option>
-              <option>Mombasa</option>
-              <option>Eldoret</option>
+              <option value="">Select City</option>
+              <option value="Nairobi">Nairobi</option>
+              <option value="Mombasa">Mombasa</option>
+              <option value="Eldoret">Eldoret</option>
             </select>
           </div>
 
           {!compareMode && (
             <>
-              <div className="intel-control-group">
-                <label>Selection Mode</label>
-                <div className="mode-toggle">
+              {/* Selection Mode Toggle */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: '0.7rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                  Selection Mode
+                </label>
+                <div style={{ display: 'flex', gap: 6 }}>
                   <button
-                    className={`mode-btn ${selectionMode === 'zone' ? 'active' : ''}`}
                     onClick={() => {
                       setSelectionMode('zone');
                       setDroppedPin(null);
                     }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: selectionMode === 'zone' ? 'none' : '1px solid rgba(124, 29, 36, 0.25)',
+                      background: selectionMode === 'zone' ? 'linear-gradient(135deg, #7c1d24, #a63a3a)' : '#ffffff',
+                      color: selectionMode === 'zone' ? '#ffffff' : '#7c1d24',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: selectionMode === 'zone' ? '0 4px 14px rgba(124, 29, 36, 0.25)' : 'none',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
-                    Official Zone
+                    Sub-Location / Ward
                   </button>
                   <button
-                    className={`mode-btn ${selectionMode === 'pin' ? 'active' : ''}`}
                     onClick={() => setSelectionMode('pin')}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: selectionMode === 'pin' ? 'none' : '1px solid rgba(124, 29, 36, 0.25)',
+                      background: selectionMode === 'pin' ? 'linear-gradient(135deg, #7c1d24, #a63a3a)' : '#ffffff',
+                      color: selectionMode === 'pin' ? '#ffffff' : '#7c1d24',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: selectionMode === 'pin' ? '0 4px 14px rgba(124, 29, 36, 0.25)' : 'none',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
                     Drop Pin
                   </button>
@@ -440,15 +434,27 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
               </div>
 
               {selectionMode === 'zone' && (
-                <div className="intel-control-group">
-                  <label>Select a Zone</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: '0.7rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                    Select Sub-Location / Ward
+                  </label>
                   <select
                     value={selectedZone}
                     onChange={e => handleZoneSelectChange(e.target.value)}
-                    className="intel-select"
-                    style={{ minWidth: 200 }}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      background: '#ffffff',
+                      color: '#7c1d24',
+                      border: '1px solid rgba(124, 29, 36, 0.25)',
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      outline: 'none',
+                      cursor: 'pointer',
+                      minWidth: 220,
+                    }}
                   >
-                    <option value="">All Zones ({city})</option>
+                    <option value="">All Sub-Locations ({city})</option>
                     {zones.map(z => (
                       <option key={z.id} value={z.id}>
                         {z.name}
@@ -460,18 +466,20 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
 
               {selectionMode === 'pin' && (
                 <>
-                  <div className="intel-control-group">
-                    <label>Radius: {radiusKm} km</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ fontSize: '0.7rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                      Radius: {radiusKm} km
+                    </label>
                     <input
                       type="range"
                       min="1"
                       max="15"
                       value={radiusKm}
                       onChange={e => setRadiusKm(Number(e.target.value))}
-                      className="radius-slider"
+                      style={{ width: 120, accentColor: '#7c1d24', cursor: 'pointer' }}
                     />
                   </div>
-                  <span className="intel-pin-hint">
+                  <span style={{ fontSize: '0.82rem', color: '#7c1d24', fontWeight: 700, alignSelf: 'center' }}>
                     {droppedPin
                       ? `Pin: ${droppedPin.lat.toFixed(4)}, ${droppedPin.lng.toFixed(4)}`
                       : 'Click map or search to drop pin.'}
@@ -482,10 +490,23 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
           )}
         </div>
 
-        <div className="intel-controls-right">
+        <div>
           <button
-            className={`compare-btn ${compareMode ? 'compare-btn-active' : ''}`}
             onClick={() => setCompareMode(!compareMode)}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 8,
+              border: 'none',
+              background: compareMode
+                ? 'linear-gradient(135deg, #7c1d24, #a63a3a)'
+                : 'linear-gradient(135deg, #7c1d24, #a63a3a)',
+              color: '#ffffff',
+              fontSize: '0.88rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(124, 29, 36, 0.25)',
+              transition: 'all 0.2s ease',
+            }}
           >
             {compareMode ? 'Exit Compare Mode' : 'Compare 2 Zones'}
           </button>
@@ -495,6 +516,7 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
       {/* ── Main Unified View ── */}
       {compareMode ? (
         <ComparisonMode
+          currentUser={currentUser}
           city={city}
           zones={zones}
           zoneAId={zoneAId}
@@ -504,12 +526,11 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
           dataA={dataA}
           dataB={dataB}
           loading={compLoading}
-          onShowToast={onShowToast}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* TOP SECTION: Full-Width Interactive GIS Map */}
-          <div style={{ width: '100%', height: 460, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: '#12151e' }}>
+          <div style={{ width: '100%', height: 460, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(124, 29, 36, 0.2)', background: '#12151e' }}>
             <MapPanel
               city={city}
               zones={zones}
@@ -541,10 +562,9 @@ export default function AreaIntelligenceView({ currentCity, onCityChange, onSwit
 
             {/* Right Column: Crime Trend Chart & Recent Reported Incidents Feed directly below chart */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <div style={{ background: '#0e1117', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
-                <CrimeTrendChart data={trendData} loading={trendLoading} />
+              <div style={{ background: '#ffffff', padding: 20, borderRadius: 16, border: '1px solid rgba(124, 29, 36, 0.15)', boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
+                <CrimeTrendChart data={trendData} loading={trendLoading} city={city} />
               </div>
-              <RecentIncidentsCard data={analysisData} />
             </div>
           </div>
         </div>
@@ -600,15 +620,11 @@ function getCalculatedZoneData(
     }
   }
 
-  // Real KNBS City Population Totals
-  const cityTotals: Record<string, { pop: number; areaKm2: number }> = {
-    Nairobi: { pop: 4750000, areaKm2: 696 },
-    Mombasa: { pop: 1310000, areaKm2: 220 },
-    Eldoret: { pop: 520000, areaKm2: 148 },
-  };
-
-  const lookupKey = Object.keys(ZONE_POPULATIONS).find(k => zoneName.includes(k)) || zoneName;
-  const zoneInfo = ZONE_POPULATIONS[lookupKey];
+  // Exact Real KNBS Census Population Lookup
+  const lookupKey = Object.keys(OFFICIAL_SUBCOUNTY_POPULATION).find(k => 
+    zoneName.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(zoneName.toLowerCase())
+  ) || zoneName;
+  const zoneInfo = OFFICIAL_SUBCOUNTY_POPULATION[lookupKey];
 
   let totalPop = 520000;
   let density = 3513;
@@ -618,37 +634,47 @@ function getCalculatedZoneData(
       totalPop = zoneInfo.pop;
       density = Math.round(zoneInfo.pop / zoneInfo.areaKm2);
     } else {
-      const cityData = cityTotals[city] || cityTotals['Nairobi'];
+      const cityData = KNBS_COUNTY_TOTALS[city] || KNBS_COUNTY_TOTALS['Nairobi'];
       totalPop = Math.round(cityData.pop / (officialList.length || 1));
       density = Math.round(totalPop / 10);
     }
   } else {
     // City Level Total
-    const cityData = cityTotals[city] || cityTotals['Nairobi'];
+    const cityData = KNBS_COUNTY_TOTALS[city] || KNBS_COUNTY_TOTALS['Nairobi'];
     totalPop = cityData.pop;
     density = Math.round(cityData.pop / cityData.areaKm2);
   }
 
-  // Calculate distinct, realistic Risk Score for each zone
-  const hash = zoneName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  // Calculate Dynamic Sub-County Risk Score (NCRC Base Risk scaled by relative Sub-County Density ratio)
+  const cMeta: Record<string, { baseRisk: number; meanDensity: number }> = {
+    Nairobi: { baseRisk: 48.7, meanDensity: 6825 },
+    Mombasa: { baseRisk: 46.2, meanDensity: 5954 },
+    Eldoret: { baseRisk: 41.5, meanDensity: 3513 },
+  };
+  const cityMeta = cMeta[city] || cMeta['Nairobi'];
+  const ncrcResult = calculateCityRiskSeverity(city, 6);
 
-  let riskScore = 48;
-  const lowerName = zoneName.toLowerCase();
-  if (lowerName.includes('cbd') || lowerName.includes('central') || lowerName.includes('town')) {
-    riskScore = 68 + (hash % 12);
-  } else if (lowerName.includes('view') || lowerName.includes('karen') || lowerName.includes('lavington') || lowerName.includes('nyali') || lowerName.includes('section 58') || lowerName.includes('milimani')) {
-    riskScore = 22 + (hash % 14);
-  } else if (lowerName.includes('pin') || lowerName.includes('location')) {
-    riskScore = 35 + (hash % 30);
-  } else if (zoneId || customName) {
-    riskScore = 36 + (hash % 36);
-  } else {
-    riskScore = 56;
+  let riskScore = ncrcResult.score;
+  if (zoneId || customName || droppedPin) {
+    if (droppedPin) {
+      const mlResult = calculateSpatialMLRiskSeverity(city, droppedPin.lat, droppedPin.lng, radiusKm, []);
+      riskScore = mlResult.score;
+    } else {
+      const densityRatio = density / cityMeta.meanDensity;
+      const scaledRisk = cityMeta.baseRisk * Math.pow(densityRatio, 0.35);
+      riskScore = Number(Math.min(95, Math.max(15, scaledRisk)).toFixed(1));
+    }
   }
 
+  const hash = zoneName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const totalIncidents = (zoneId || customName)
-    ? Math.round((riskScore / 100) * 120 + (hash % 25))
+    ? Math.round((riskScore / 100) * 120 + (hash % 15))
     : (city === 'Nairobi' ? 1280 : city === 'Mombasa' ? 620 : 340);
+
+  const NCRC_Breakdown = ncrcResult.topIncidents.map(inc => ({
+    category: inc.category,
+    count: Math.round((inc.percentage / 100) * totalIncidents)
+  }));
 
   return {
     city,
@@ -656,19 +682,8 @@ function getCalculatedZoneData(
     zone_name: zoneName,
     risk_score: riskScore,
     total_incidents: totalIncidents,
-    crime_breakdown: [
-      { category: 'Theft', count: Math.round(totalIncidents * 0.44) },
-      { category: 'Traffic & Mobility Disruptions', count: Math.round(totalIncidents * 0.26) },
-      { category: 'Assault', count: Math.round(totalIncidents * 0.16) },
-      { category: 'Burglary', count: Math.round(totalIncidents * 0.14) },
-    ],
-    infrastructure_summary: [
-      { type: 'Police Station', count: Math.max(1, (hash % 4) + 1) },
-      { type: 'Hospital', count: Math.max(2, (hash % 6) + 2) },
-      { type: 'School', count: Math.max(4, (hash % 12) + 3) },
-      { type: 'Power Substation', count: Math.max(1, (hash % 3) + 1) },
-      { type: 'Transit Hub', count: Math.max(2, (hash % 5) + 1) },
-    ],
+    crime_breakdown: NCRC_Breakdown,
+    infrastructure_summary: getSubCountyInfrastructureList(zoneName, city),
     population_info: {
       total_population: totalPop,
       density: density,
@@ -732,4 +747,137 @@ function generateSampleIncidents(city: string): IncidentPoint[] {
     category: categories[i % categories.length],
     severity: severities[i % severities.length],
   }));
+}
+
+export function getSubCountyInfrastructureList(zoneName: string, city: string) {
+  const zLower = (zoneName || '').toLowerCase();
+  
+  if (zLower.includes('westlands')) {
+    return [
+      { type: 'Police Station', count: 4 },
+      { type: 'Hospital', count: 8 },
+      { type: 'School', count: 18 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 6 },
+    ];
+  }
+  if (zLower.includes('cbd') || zLower.includes('central')) {
+    return [
+      { type: 'Police Station', count: 6 },
+      { type: 'Hospital', count: 12 },
+      { type: 'School', count: 14 },
+      { type: 'Power Substation', count: 4 },
+      { type: 'Transit Hub', count: 12 },
+    ];
+  }
+  if (zLower.includes('kibra')) {
+    return [
+      { type: 'Police Station', count: 2 },
+      { type: 'Hospital', count: 5 },
+      { type: 'School', count: 22 },
+      { type: 'Power Substation', count: 1 },
+      { type: 'Transit Hub', count: 5 },
+    ];
+  }
+  if (zLower.includes('kilimani') || zLower.includes('lavington')) {
+    return [
+      { type: 'Police Station', count: 3 },
+      { type: 'Hospital', count: 7 },
+      { type: 'School', count: 16 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 4 },
+    ];
+  }
+  if (zLower.includes('karen') || zLower.includes('langata')) {
+    return [
+      { type: 'Police Station', count: 3 },
+      { type: 'Hospital', count: 4 },
+      { type: 'School', count: 14 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 3 },
+    ];
+  }
+  if (zLower.includes('embakasi')) {
+    return [
+      { type: 'Police Station', count: 5 },
+      { type: 'Hospital', count: 9 },
+      { type: 'School', count: 28 },
+      { type: 'Power Substation', count: 3 },
+      { type: 'Transit Hub', count: 8 },
+    ];
+  }
+  if (zLower.includes('kasarani') || zLower.includes('roysambu')) {
+    return [
+      { type: 'Police Station', count: 4 },
+      { type: 'Hospital', count: 6 },
+      { type: 'School', count: 24 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 6 },
+    ];
+  }
+  if (zLower.includes('nyali')) {
+    return [
+      { type: 'Police Station', count: 3 },
+      { type: 'Hospital', count: 6 },
+      { type: 'School', count: 12 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 4 },
+    ];
+  }
+  if (zLower.includes('likoni')) {
+    return [
+      { type: 'Police Station', count: 2 },
+      { type: 'Hospital', count: 3 },
+      { type: 'School', count: 10 },
+      { type: 'Power Substation', count: 1 },
+      { type: 'Transit Hub', count: 3 },
+    ];
+  }
+  if (zLower.includes('mombasa island') || zLower.includes('old town') || zLower.includes('mvita')) {
+    return [
+      { type: 'Police Station', count: 5 },
+      { type: 'Hospital', count: 8 },
+      { type: 'School', count: 15 },
+      { type: 'Power Substation', count: 3 },
+      { type: 'Transit Hub', count: 7 },
+    ];
+  }
+  if (zLower.includes('pioneer') || zLower.includes('eldoret cbd')) {
+    return [
+      { type: 'Police Station', count: 3 },
+      { type: 'Hospital', count: 5 },
+      { type: 'School', count: 11 },
+      { type: 'Power Substation', count: 2 },
+      { type: 'Transit Hub', count: 5 },
+    ];
+  }
+  if (zLower.includes('langas') || zLower.includes('huruma')) {
+    return [
+      { type: 'Police Station', count: 2 },
+      { type: 'Hospital', count: 3 },
+      { type: 'School', count: 14 },
+      { type: 'Power Substation', count: 1 },
+      { type: 'Transit Hub', count: 4 },
+    ];
+  }
+
+  const lookupKey = Object.keys(OFFICIAL_SUBCOUNTY_POPULATION).find(k => 
+    zLower.includes(k.toLowerCase()) || k.toLowerCase().includes(zLower)
+  ) || zLower;
+  const zoneInfo = OFFICIAL_SUBCOUNTY_POPULATION[lookupKey];
+  const pop = zoneInfo ? zoneInfo.pop : 150000;
+
+  const police = Math.max(1, Math.round(pop / 65000));
+  const hospital = Math.max(2, Math.round(pop / 40000));
+  const school = Math.max(4, Math.round(pop / 15000));
+  const power = Math.max(1, Math.round(pop / 100000));
+  const transit = Math.max(2, Math.round(pop / 45000));
+
+  return [
+    { type: 'Police Station', count: police },
+    { type: 'Hospital', count: hospital },
+    { type: 'School', count: school },
+    { type: 'Power Substation', count: power },
+    { type: 'Transit Hub', count: transit },
+  ];
 }

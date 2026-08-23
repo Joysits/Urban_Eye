@@ -21,9 +21,9 @@ export default function RiskScoreRing({ score }: Props) {
     : 'Low Risk';
 
   return (
-    <div className="risk-ring-wrapper">
+    <div className="risk-ring-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <svg width="140" height="140" viewBox="0 0 140 140">
-        <circle cx="70" cy="70" r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="rgba(124, 29, 36, 0.15)" strokeWidth="12" />
         <circle
           cx="70" cy="70" r={radius}
           fill="none"
@@ -35,17 +35,17 @@ export default function RiskScoreRing({ score }: Props) {
           transform="rotate(-90 70 70)"
           style={{
             transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease',
-            filter: `drop-shadow(0 0 8px ${color}80)`,
+            filter: `drop-shadow(0 0 8px ${color}50)`,
           }}
         />
-        <text x="70" y="65" textAnchor="middle" fill="#fff" fontSize="24" fontWeight="700" fontFamily="Outfit, Inter, sans-serif">
-          {score}
+        <text x="70" y="64" textAnchor="middle" fill="#7c1d24" fontSize="24" fontWeight="800" fontFamily="Outfit, Inter, sans-serif">
+          {score}%
         </text>
-        <text x="70" y="82" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10">
+        <text x="70" y="82" textAnchor="middle" fill="#7c1d24" fontSize="10" fontWeight="700">
           / 100
         </text>
       </svg>
-      <div className="risk-ring-label" style={{ color }}>{label}</div>
+      <div className="risk-ring-label" style={{ color: '#7c1d24', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginTop: 2 }}>{label}</div>
     </div>
   );
 }

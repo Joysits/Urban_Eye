@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import type { AnalysisData, Zone } from '../../types';
 import RiskScoreRing from './RiskScoreRing';
-import type { ComparisonReportData } from '../../utils/reportExporter';
 
 interface Props {
+  currentUser?: any;
   zoneA?: AnalysisData | null;
   dataA?: AnalysisData | null;
   zoneB?: AnalysisData | null;
@@ -19,121 +19,123 @@ interface Props {
   onZoneBChange?: (id: string) => void;
   city: string;
   loading: boolean;
-  onShowToast?: (msg: string) => void;
+  onSaveReport?: (title: string, summary: string) => void;
 }
 
 function authHeaders() {
   const token = localStorage.getItem('token');
-  return { 'Content-Type': 'application/json', Authorization: `Token ${token}` };
+  return { 'Content-Type': 'application/json', Authorization: token ? `Token ${token}` : '' };
 }
 
-function Delta({ a, b, label, higherIsBetter = false }: {
-  a: number | null; b: number | null; label: string; higherIsBetter?: boolean;
+function DeltaRow({ a, b, label, higherIsBetter = false }: {
+  a: number | null | undefined; b: number | null | undefined; label: string; higherIsBetter?: boolean;
 }) {
-  if (a == null || b == null) return null;
+  if (a == null || b == null) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(124, 29, 36, 0.12)', fontSize: '0.8rem' }}>
+        <span style={{ color: '#7a4d52' }}>{label}</span>
+        <span style={{ color: '#7a4d52' }}>—</span>
+      </div>
+    );
+  }
+
   const diff = a - b;
   const isPositive = diff >= 0;
   const isBetter = higherIsBetter ? isPositive : !isPositive;
-  const color = diff === 0 ? '#718096' : isBetter ? '#68d391' : '#fc8181';
+  const color = diff === 0 ? '#7a4d52' : isBetter ? '#16a34a' : '#dc2626';
+
   return (
-    <div className="delta-row">
-      <span className="delta-label">{label}</span>
-      <span className="delta-value" style={{ color }}>
-        {diff === 0 ? '=' : isPositive ? '▲' : '▼'} {Math.abs(diff).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(124, 29, 36, 0.12)', fontSize: '0.82rem' }}>
+      <span style={{ color: '#1c0507', fontWeight: 600 }}>{label}</span>
+      <span style={{ color, fontWeight: 800, fontFamily: 'monospace' }}>
+        {diff === 0 ? '=' : isPositive ? '▲ +' : '▼ '}
+        {Math.abs(diff).toLocaleString(undefined, { maximumFractionDigits: 1 })}
       </span>
     </div>
   );
 }
 
-function MiniBar({ value, max, label }: { value: number; max: number; label: string }) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  const t = pct / 100;
-  const r = Math.round(255 - t * (255 - 90));
-  const g = Math.round(179 - t * (179 - 10));
-  const b = Math.round(179 - t * (179 - 16));
+function MiniBar({ value, max, label, total }: { value: number; max: number; label: string; total?: number }) {
+  const pct = total && total > 0 ? (value / total) * 100 : (max > 0 ? (value / max) * 100 : 0);
   return (
-    <div className="comp-mini-bar-row">
-      <span className="comp-mini-label">{label}</span>
-      <div className="comp-mini-track">
-        <div
-          className="comp-mini-fill"
-          style={{ width: `${pct}%`, background: `rgb(${r},${g},${b})` }}
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '4px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#1c0507', fontWeight: 600 }}>
+        <span>{label}</span>
+        <span style={{ color: '#7c1d24', fontWeight: 800 }}>{pct.toFixed(1)}%</span>
       </div>
-      <span className="comp-mini-count">{value}</span>
+      <div style={{ height: 6, width: '100%', background: '#f5f0f1', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: 'linear-gradient(90deg, #7c1d24, #a63a3a)', borderRadius: 3 }} />
+      </div>
     </div>
   );
 }
 
-function ZoneCard({ data, label, colorClass }: {
-  data: AnalysisData | null; label: string; colorClass: string;
+function ZoneCard({ data, label, colorBadge }: {
+  data: AnalysisData | null; label: string; colorBadge: string;
 }) {
   if (!data) {
     return (
-      <div className={`comp-card comp-card-empty comp-card-${colorClass}`}>
-        <div className="comp-card-label-badge">{label}</div>
-        <p>Select a zone to load data</p>
+      <div style={{ background: '#ffffff', border: '1px dashed rgba(124, 29, 36, 0.3)', borderRadius: 16, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, textAlign: 'center', boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
+        <div style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.2)', color: colorBadge, padding: '4px 14px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 800, letterSpacing: '1px', marginBottom: 16 }}>
+          {label}
+        </div>
+        <p style={{ color: '#7c1d24', fontSize: '0.9rem', margin: 0, fontWeight: 600 }}>Select a sub-county from the dropdown above to load comparative data</p>
       </div>
     );
   }
 
   const filteredCrime = (data.crime_breakdown ?? []).filter(c => c.category !== 'Other');
-  const maxCrime = Math.max(...filteredCrime.map(c => c.count), 1);
+  const totalCrimeCount = filteredCrime.reduce((acc, c) => acc + c.count, 0) || 1;
 
   return (
-    <div className={`comp-card fade-in comp-card-${colorClass}`}>
-      <div className="comp-card-header">
-        <span className="comp-card-label-badge">{label}</span>
-        <h3 className="comp-card-title">{data.zone_name}</h3>
-        <span className="comp-card-city">{data.city}</span>
-      </div>
-
-      <div className="comp-card-ring">
-        <RiskScoreRing score={data.risk_score} />
-      </div>
-
-      <div className="comp-stats-grid">
-        <div className="comp-stat-box">
-          <span className="comp-stat-label">Incidents</span>
-          <strong className="comp-stat-val">{data.total_incidents.toLocaleString()}</strong>
+    <div className="fade-in" style={{ background: '#ffffff', border: '1px solid rgba(124, 29, 36, 0.15)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(124, 29, 36, 0.12)', paddingBottom: 14 }}>
+        <div>
+          <span style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.2)', color: colorBadge, padding: '3px 10px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase' }}>
+            {label}
+          </span>
+          <h3 style={{ margin: '8px 0 0 0', fontSize: '1.2rem', fontWeight: 800, color: '#1c0507', fontFamily: 'Outfit, sans-serif' }}>{data.zone_name}</h3>
         </div>
-        <div className="comp-stat-box">
-          <span className="comp-stat-label">Population</span>
-          <strong className="comp-stat-val">
+        <span style={{ fontSize: '0.78rem', color: '#7c1d24', fontWeight: 700 }}>{data.city} Sub-County</span>
+      </div>
+
+      {/* Sub-County Risk Score Ring */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 6 }}>
+        <RiskScoreRing score={data.risk_score} />
+        <span style={{ fontSize: '0.72rem', color: '#7c1d24', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sub-County Risk Score</span>
+      </div>
+
+      {/* Stats Grid: Focus exclusively on Sub-County Risk, Population, and Density */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <div style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.12)', padding: '10px 10px', borderRadius: 10, textAlign: 'center' }}>
+          <span style={{ display: 'block', fontSize: '0.66rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Sub-County Risk</span>
+          <strong style={{ display: 'block', fontSize: '1.05rem', color: '#b91c1c', marginTop: 2 }}>{data.risk_score}%</strong>
+        </div>
+        <div style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.12)', padding: '10px 10px', borderRadius: 10, textAlign: 'center' }}>
+          <span style={{ display: 'block', fontSize: '0.66rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Population</span>
+          <strong style={{ display: 'block', fontSize: '1.05rem', color: '#1c0507', marginTop: 2 }}>
             {data.population_info?.total_population?.toLocaleString() ?? '—'}
           </strong>
         </div>
-        <div className="comp-stat-box">
-          <span className="comp-stat-label">Density /km²</span>
-          <strong className="comp-stat-val">
+        <div style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.12)', padding: '10px 10px', borderRadius: 10, textAlign: 'center' }}>
+          <span style={{ display: 'block', fontSize: '0.66rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Density /km²</span>
+          <strong style={{ display: 'block', fontSize: '1.05rem', color: '#1c0507', marginTop: 2 }}>
             {data.population_info?.density?.toLocaleString() ?? '—'}
           </strong>
         </div>
-        <div className="comp-stat-box">
-          <span className="comp-stat-label">Growth</span>
-          <strong className="comp-stat-val" style={{ color: '#68d391' }}>
-            {data.population_info?.growth_rate != null
-              ? `+${data.population_info.growth_rate}%`
-              : '—'}
-          </strong>
-        </div>
       </div>
 
-      <div className="comp-breakdown-section">
-        <p className="comp-breakdown-title">Crime by Category</p>
-        {filteredCrime.slice(0, 5).map(item => (
-          <MiniBar key={item.category} value={item.count} max={maxCrime} label={item.category} />
-        ))}
-      </div>
-
+      {/* Sub-County Physical Infrastructure */}
       {data.infrastructure_summary?.length > 0 && (
-        <div className="comp-infra-section">
-          <p className="comp-breakdown-title">Infrastructure</p>
-          <div className="comp-infra-chips">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid rgba(124, 29, 36, 0.12)' }}>
+          <span style={{ fontSize: '0.72rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800 }}>Sub-County Physical Infrastructure</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {data.infrastructure_summary.slice(0, 4).map((inf: { infra_type?: string; type?: string; count: number }) => (
-              <span key={inf.infra_type ?? inf.type} className="comp-infra-chip">
-                {inf.infra_type ?? inf.type} · {inf.count}
-              </span>
+              <div key={inf.infra_type ?? inf.type} style={{ background: '#f8f4f4', border: '1px solid rgba(124, 29, 36, 0.15)', padding: '6px 10px', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                <span style={{ color: '#1c0507', fontWeight: 600 }}>• {inf.infra_type ?? inf.type}</span>
+                <span style={{ color: '#7c1d24', fontWeight: 800 }}>{inf.count}</span>
+              </div>
             ))}
           </div>
         </div>
@@ -145,7 +147,7 @@ function ZoneCard({ data, label, colorClass }: {
 export default function ComparisonMode({
   zoneA, dataA, zoneB, dataB, zones, selectedZoneA, zoneAId,
   selectedZoneB, zoneBId, onSelectZoneA, onZoneAChange,
-  onSelectZoneB, onZoneBChange, city, loading, onShowToast,
+  onSelectZoneB, onZoneBChange, city, loading, onSaveReport, currentUser
 }: Props) {
   const activeZoneAData = zoneA ?? dataA ?? null;
   const activeZoneBData = zoneB ?? dataB ?? null;
@@ -156,184 +158,180 @@ export default function ComparisonMode({
   const setA = onSelectZoneA ?? onZoneAChange;
   const setB = onSelectZoneB ?? onZoneBChange;
 
-  const [savedAlert, setSavedAlert] = useState<string | null>(null);
-
-  // Fetch trend data for both zones
-  const [trendA, setTrendA] = useState<{ month: string; total: number }[]>([]);
-  const [trendB, setTrendB] = useState<{ month: string; total: number }[]>([]);
-
-  useEffect(() => {
-    if (!selA) { setTrendA([]); return; }
-    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selA}&months=6`, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => setTrendA(d.month_totals ?? []))
-      .catch(() => setTrendA([]));
-  }, [selA, city]);
-
-  useEffect(() => {
-    if (!selB) { setTrendB([]); return; }
-    fetch(`/api/analysis/crime-trend/?city=${encodeURIComponent(city)}&zone_id=${selB}&months=6`, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => setTrendB(d.month_totals ?? []))
-      .catch(() => setTrendB([]));
-  }, [selB, city]);
-
-  const maxTrend = Math.max(...trendA.map(m => m.total), ...trendB.map(m => m.total), 1);
+  const [toastSaved, setToastSaved] = useState(false);
 
   const handleSaveComparison = () => {
     if (!activeZoneAData || !activeZoneBData) {
-      setSavedAlert('Please select both Zone A and Zone B before saving.');
-      setTimeout(() => setSavedAlert(null), 4000);
+      alert('Please select both Sub-County A and Sub-County B from the dropdowns before saving the comparison.');
       return;
     }
 
-    const item: ComparisonReportData = {
-      id: `comp_${Date.now()}`,
-      city,
+    const title = `${activeZoneAData.zone_name} vs ${activeZoneBData.zone_name} Sub-County Comparison`;
+    const summary = `=== SUB-COUNTY COMPARATIVE ANALYSIS SUMMARY ===\nCity: ${city}\nSub-County A (${activeZoneAData.zone_name}): Risk Score ${activeZoneAData.risk_score}% | Pop: ${activeZoneAData.population_info?.total_population?.toLocaleString()} | Density: ${activeZoneAData.population_info?.density} /km²\nSub-County B (${activeZoneBData.zone_name}): Risk Score ${activeZoneBData.risk_score}% | Pop: ${activeZoneBData.population_info?.total_population?.toLocaleString()} | Density: ${activeZoneBData.population_info?.density} /km²\nSub-County Risk Score Delta (A - B): ${(activeZoneAData.risk_score - activeZoneBData.risk_score).toFixed(1)} points.`;
+
+    let userEmail = currentUser?.email || '';
+    if (!userEmail) {
+      try {
+        const storedUser = localStorage.getItem('smart_urban_user');
+        if (storedUser) {
+          const u = JSON.parse(storedUser);
+          if (u && u.email) userEmail = u.email;
+        }
+      } catch {}
+    }
+
+    const userKey = (userEmail || 'guest').toLowerCase();
+    const storageKey = `saved_zone_comparisons_${userKey}`;
+
+    const newComparison = {
+      id: 'comp_' + Date.now(),
+      title,
+      city: city || 'Nairobi',
       created_at: new Date().toISOString(),
-      zoneA_name: activeZoneAData.zone_name,
-      zoneA_risk: activeZoneAData.risk_score,
-      zoneA_incidents: activeZoneAData.total_incidents,
-      zoneA_density: activeZoneAData.population_info?.density ?? 0,
-      zoneB_name: activeZoneBData.zone_name,
-      zoneB_risk: activeZoneBData.risk_score,
-      zoneB_incidents: activeZoneBData.total_incidents,
-      zoneB_density: activeZoneBData.population_info?.density ?? 0,
-      risk_diff: (activeZoneAData.risk_score ?? 0) - (activeZoneBData.risk_score ?? 0),
-      incidents_diff: (activeZoneAData.total_incidents ?? 0) - (activeZoneBData.total_incidents ?? 0),
-      density_diff: (activeZoneAData.population_info?.density ?? 0) - (activeZoneBData.population_info?.density ?? 0),
+      zoneA: {
+        name: activeZoneAData.zone_name,
+        risk_score: activeZoneAData.risk_score || 50,
+        population: activeZoneAData.population_info?.total_population || 0,
+        density: activeZoneAData.population_info?.density || 0,
+      },
+      zoneB: {
+        name: activeZoneBData.zone_name,
+        risk_score: activeZoneBData.risk_score || 50,
+        population: activeZoneBData.population_info?.total_population || 0,
+        density: activeZoneBData.population_info?.density || 0,
+      },
+      summary,
     };
 
     try {
-      const savedUser = localStorage.getItem('user');
-      const userKey = savedUser ? (JSON.parse(savedUser).email || 'guest').toLowerCase() : 'guest';
-      const existing = JSON.parse(localStorage.getItem(`saved_zone_comparisons_${userKey}`) || '[]');
-      const updated = [item, ...existing.filter((e: ComparisonReportData) => e.id !== item.id).slice(0, 9)];
-      localStorage.setItem(`saved_zone_comparisons_${userKey}`, JSON.stringify(updated));
-      setSavedAlert(`Saved comparison (${activeZoneAData.zone_name} vs ${activeZoneBData.zone_name}) to Report Generator!`);
-      onShowToast?.("Comparison Saved!");
-      setTimeout(() => setSavedAlert(null), 4000);
-    } catch (e) {
-      console.error(e);
-    }
+      const existing = localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : [];
+      const updated = [newComparison, ...parsed];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      localStorage.setItem('urban_eye_saved_comparisons', JSON.stringify(updated));
+      localStorage.setItem('saved_zone_comparisons_guest', JSON.stringify(updated));
+    } catch {}
+
+    try {
+      fetch('/api/reports/generate_from_analysis/', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          city,
+          title,
+          focus: 'analytics',
+          summary,
+        }),
+      });
+    } catch {}
+
+    setToastSaved(true);
+    setTimeout(() => setToastSaved(false), 4000);
   };
 
   return (
-    <div className="comparison-mode fade-in">
-      <div className="comp-header">
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* ── Top Selector Bar ── */}
+      <div style={{ background: '#ffffff', border: '1px solid rgba(124, 29, 36, 0.15)', borderRadius: 16, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
         <div>
-          <h2 className="comp-title">Zone Comparison</h2>
-          <p className="comp-subtitle">{city} · Side-by-side comparative analysis</p>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#1c0507', fontFamily: 'Outfit, sans-serif' }}>SUB-COUNTY COMPARISON</h2>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#7c1d24', fontWeight: 600 }}>{city} · Side-by-side comparative sub-county metrics</p>
         </div>
-      </div>
 
-      <div className="comp-selectors">
-        <div className="comp-selector">
-          <label>Zone A</label>
-          <select value={selA} onChange={e => setA?.(e.target.value)}>
-            <option value="">Select Zone A</option>
-            {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
-          </select>
-        </div>
-        <div className="comp-vs">VS</div>
-        <div className="comp-selector">
-          <label>Zone B</label>
-          <select value={selB} onChange={e => setB?.(e.target.value)}>
-            <option value="">Select Zone B</option>
-            {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
-          </select>
+        {/* Dropdown Selectors */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '0.7rem', color: '#7c1d24', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Select Sub-County A</label>
+            <select
+              value={selA}
+              onChange={e => setA?.(e.target.value)}
+              style={{ padding: '8px 14px', borderRadius: 8, background: '#ffffff', color: '#1c0507', border: '1px solid rgba(124, 29, 36, 0.25)', fontSize: '0.85rem', fontWeight: 700, outline: 'none', cursor: 'pointer', minWidth: 200 }}
+            >
+              <option value="">Select Sub-County A</option>
+              {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
+            </select>
+          </div>
+
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#7c1d24', fontFamily: 'Outfit, sans-serif', padding: '16px 4px 0' }}>VS</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '0.7rem', color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Select Sub-County B</label>
+            <select
+              value={selB}
+              onChange={e => setB?.(e.target.value)}
+              style={{ padding: '8px 14px', borderRadius: 8, background: '#ffffff', color: '#1c0507', border: '1px solid rgba(29, 78, 216, 0.35)', fontSize: '0.85rem', fontWeight: 700, outline: 'none', cursor: 'pointer', minWidth: 200 }}
+            >
+              <option value="">Select Sub-County B</option>
+              {zones.map(z => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
       {loading && (
-        <div style={{ textAlign: 'center', color: '#a0aec0', padding: '40px' }}>
+        <div style={{ textAlign: 'center', color: '#7c1d24', padding: '40px', fontWeight: 600 }}>
           <div className="spinner" style={{ margin: '0 auto 12px' }} />
-          Loading zone comparison data…
+          Calculating sub-county comparative metrics…
         </div>
       )}
 
       {!loading && (
         <>
-          <div className="comp-grid">
-            <ZoneCard data={activeZoneAData} label="ZONE A" colorClass="a" />
+          {/* 3-Column Grid: Zone A Card | Differences Panel | Zone B Card */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.8fr 1.1fr', gap: 20, alignItems: 'start' }}>
+            
+            {/* Column 1: Zone A */}
+            <ZoneCard data={activeZoneAData} label="SUB-COUNTY A" colorBadge="#7c1d24" />
 
-            <div className="comp-deltas">
-              <h4>Differences (A − B)</h4>
-              <Delta a={activeZoneAData?.risk_score ?? null}                             b={activeZoneBData?.risk_score ?? null}                             label="Risk Score" />
-              <Delta a={activeZoneAData?.total_incidents ?? null}                        b={activeZoneBData?.total_incidents ?? null}                        label="Incidents" />
-              <Delta a={activeZoneAData?.population_info?.density ?? null}               b={activeZoneBData?.population_info?.density ?? null}               label="Density /km²" />
-              <Delta a={activeZoneAData?.population_info?.growth_rate ?? null}           b={activeZoneBData?.population_info?.growth_rate ?? null}           label="Growth %" higherIsBetter />
-              <Delta a={activeZoneAData?.population_info?.total_population ?? null}      b={activeZoneBData?.population_info?.total_population ?? null}      label="Population" higherIsBetter />
+            {/* Column 2: Differences Panel */}
+            <div style={{ background: '#ffffff', border: '1px solid rgba(124, 29, 36, 0.15)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
+              <div style={{ textAlign: 'center', borderBottom: '1px solid rgba(124, 29, 36, 0.12)', paddingBottom: 10 }}>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#1c0507', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'Outfit, sans-serif', fontWeight: 800 }}>
+                  SUB-COUNTY VARIANCE (A − B)
+                </h4>
+                <small style={{ color: '#7c1d24', fontSize: '0.72rem', fontWeight: 700 }}>Comparing sub-county metrics</small>
+              </div>
 
+              <div>
+                <DeltaRow a={activeZoneAData?.risk_score} b={activeZoneBData?.risk_score} label="Sub-County Risk Score" />
+                <DeltaRow a={activeZoneAData?.population_info?.total_population} b={activeZoneBData?.population_info?.total_population} label="Sub-County Population" higherIsBetter />
+                <DeltaRow a={activeZoneAData?.population_info?.density} b={activeZoneBData?.population_info?.density} label="Sub-County Density /km²" />
+              </div>
+
+              {/* Action Button */}
               <button
-                type="button"
                 onClick={handleSaveComparison}
                 style={{
-                  marginTop: 16,
                   width: '100%',
-                  padding: '10px 12px',
-                  background: 'linear-gradient(135deg, #e65c5c, #b91c1c)',
-                  color: '#fff',
-                  border: 'none',
+                  padding: '12px 16px',
                   borderRadius: 8,
+                  background: 'linear-gradient(135deg, #7c1d24, #a63a3a)',
+                  border: 'none',
+                  color: '#ffffff',
                   fontSize: '0.82rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  letterSpacing: '0.5px',
-                  boxShadow: '0 4px 12px rgba(230, 92, 92, 0.3)',
-                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px rgba(124, 29, 36, 0.25)',
+                  transition: 'all 0.2s ease',
+                  marginTop: 8,
                 }}
               >
-                💾 Save Comparison to Report
+                Save Sub-County Comparison Report
               </button>
-
-              {savedAlert && (
-                <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#68d391', fontWeight: 600, textAlign: 'center' }}>
-                  {savedAlert}
-                </div>
-              )}
             </div>
 
-            <ZoneCard data={activeZoneBData} label="ZONE B" colorClass="b" />
+            {/* Column 3: Zone B */}
+            <ZoneCard data={activeZoneBData} label="SUB-COUNTY B" colorBadge="#1d4ed8" />
           </div>
-
-          {/* Trend overlay chart */}
-          {(trendA.length > 0 || trendB.length > 0) && (
-            <div className="comp-trend-section">
-              <h4 className="comp-trend-title">6-Month Incident Trend Overlay</h4>
-              <div className="comp-trend-chart">
-                {(trendA.length > 0 ? trendA : trendB).map((m, i) => {
-                  const aVal = trendA[i]?.total ?? 0;
-                  const bVal = trendB[i]?.total ?? 0;
-                  const label = m.month
-                    ? new Date(m.month + '-01').toLocaleString('default', { month: 'short' })
-                    : `M${i + 1}`;
-                  return (
-                    <div key={m.month ?? i} className="comp-trend-col">
-                      <div className="comp-trend-bars">
-                        <div
-                          className="comp-trend-bar comp-trend-bar-a"
-                          style={{ height: `${(aVal / maxTrend) * 100}%` }}
-                          title={`Zone A: ${aVal}`}
-                        />
-                        <div
-                          className="comp-trend-bar comp-trend-bar-b"
-                          style={{ height: `${(bVal / maxTrend) * 100}%` }}
-                          title={`Zone B: ${bVal}`}
-                        />
-                      </div>
-                      <span className="comp-trend-label">{label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="comp-trend-legend">
-                <span><span className="comp-legend-dot" style={{ background: '#c93030' }} />{activeZoneAData?.zone_name ?? 'Zone A'}</span>
-                <span><span className="comp-legend-dot" style={{ background: '#3b82f6' }} />{activeZoneBData?.zone_name ?? 'Zone B'}</span>
-              </div>
-            </div>
-          )}
         </>
+      )}
+
+      {/* Toast Banner for Saved Report */}
+      {toastSaved && (
+        <div className="intel-toast intel-toast-success">
+          <span>Comparative report saved successfully to Report Generator!</span>
+        </div>
       )}
     </div>
   );

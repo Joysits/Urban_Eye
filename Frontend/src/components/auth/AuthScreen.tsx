@@ -49,7 +49,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   };
 
   const isStrictPassword = (pass: string): boolean => {
-    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{6,}$/.test(pass);
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(pass);
   };
 
   const showShortToast = (message: string, type: 'success' | 'error') => {
@@ -84,8 +84,8 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       return;
     }
 
-    if (siPass.length < 6) {
-      showShortToast('Password must be at least 6 characters long.', 'error');
+    if (siPass.length < 8) {
+      showShortToast('Password must be at least 8 characters long.', 'error');
       return;
     }
 
@@ -104,11 +104,15 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       try { data = await res.json(); } catch (_) {}
 
       if (res.ok && data?.token) {
+        const registeredProfiles = JSON.parse(localStorage.getItem('registered_user_profiles') || '{}');
+        const savedProfile = registeredProfiles[cleanEmail];
+        const apiName = (data.user?.first_name || data.user?.last_name) ? `${data.user?.first_name || ''} ${data.user?.last_name || ''}`.trim() : data.user?.name;
+        
         const loggedUser: User = {
-          name: dbRecord?.user?.name || data.user?.name || cleanEmail.split('@')[0],
+          name: dbRecord?.user?.name || savedProfile?.name || apiName || cleanEmail.split('@')[0],
           email: data.user?.email || cleanEmail,
-          city: data.user?.profile?.focus_city || dbRecord?.user?.city || 'Nairobi',
-          role: dbRecord?.user?.role || data.user?.profile?.agency_role || 'Urban Planner',
+          city: data.user?.profile?.focus_city || dbRecord?.user?.city || savedProfile?.city || 'Nairobi',
+          role: dbRecord?.user?.role || data.user?.profile?.agency_role || savedProfile?.role || 'Urban Planner',
         };
         
         if (rememberMe) {
@@ -192,7 +196,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }
 
     if (!isStrictPassword(suPass)) {
-      showShortToast('Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      showShortToast('Password format: min 8 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
       return;
     }
 
@@ -241,7 +245,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     showShortToast('Account saved successfully!', 'success');
   };
 
-  // Forgot Password: Dispatch email and 4-digit code
+  // Forgot Password
   const handleForgotSend = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlert(null);
@@ -260,10 +264,10 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         body: JSON.stringify({ email: cleanEmail }),
       });
       const data = await res.json();
-      if (res.ok && data.code) {
-        setResetCode(data.code);
+      if (res.ok) {
+        setResetCode('');
         setView('reset');
-        showShortToast(`4-digit reset code sent to ${cleanEmail}! (Code: ${data.code})`, 'success');
+        showShortToast(`4-digit reset verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
       } else {
         showShortToast(data.error || 'No account found with this email address.', 'error');
       }
@@ -274,10 +278,9 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         setLoading(false);
         return;
       }
-      const local4Code = Math.floor(1000 + Math.random() * 9000).toString();
-      setResetCode(local4Code);
+      setResetCode('');
       setView('reset');
-      showShortToast(`4-digit reset code sent to ${cleanEmail}! (Code: ${local4Code})`, 'success');
+      showShortToast(`4-digit reset verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
     } finally {
       setLoading(false);
     }
@@ -288,24 +291,16 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     setLoading(true);
     const cleanEmail = fEmail.trim().toLowerCase();
     try {
-      const res = await fetch('/api/auth/forgot-password/', {
+      await fetch('/api/auth/forgot-password/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-      const data = await res.json();
-      if (res.ok && data.code) {
-        setResetCode(data.code);
-        showShortToast(`Resent code: ${data.code}`, 'success');
-      } else {
-        const newCode = Math.floor(1000 + Math.random() * 9000).toString();
-        setResetCode(newCode);
-        showShortToast(`Resent code: ${newCode}`, 'success');
-      }
+      setResetCode('');
+      showShortToast(`Resent new 4-digit code to ${cleanEmail}! Please check your email inbox.`, 'success');
     } catch {
-      const newCode = Math.floor(1000 + Math.random() * 9000).toString();
-      setResetCode(newCode);
-      showShortToast(`Resent code: ${newCode}`, 'success');
+      setResetCode('');
+      showShortToast(`Resent new 4-digit code to ${cleanEmail}! Please check your email inbox.`, 'success');
     } finally {
       setLoading(false);
     }
@@ -317,7 +312,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     setAlert(null);
 
     if (!isStrictPassword(newPassword)) {
-      showShortToast('Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      showShortToast('Password format: min 8 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
       return;
     }
 
@@ -326,29 +321,26 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       const res = await fetch('/api/auth/reset-password/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: resetCode, new_password: newPassword }),
+        body: JSON.stringify({ token: resetCode.trim(), new_password: newPassword }),
       });
       const data = await res.json();
       if (res.ok) {
-        setView('signin');
-        showShortToast('Password reset successful! Please sign in.', 'success');
-      } else {
+        // Also update local DB map if account exists locally
         const dbMap = getRegisteredUsersMap();
-        if (dbMap[fEmail.trim().toLowerCase()]) {
-          dbMap[fEmail.trim().toLowerCase()].pass = newPassword;
+        const cleanEmail = fEmail.trim().toLowerCase();
+        if (dbMap[cleanEmail]) {
+          dbMap[cleanEmail].pass = newPassword;
           localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
         }
+        setResetCode('');
+        setNewPassword('');
         setView('signin');
-        showShortToast('Password reset successful! Please sign in.', 'success');
+        showShortToast(' Password reset successful! Please sign in with your new password.', 'success');
+      } else {
+        showShortToast(data.error || 'Invalid 4-digit verification code. Please enter the exact code sent to your email.', 'error');
       }
     } catch {
-      const dbMap = getRegisteredUsersMap();
-      if (dbMap[fEmail.trim().toLowerCase()]) {
-        dbMap[fEmail.trim().toLowerCase()].pass = newPassword;
-        localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
-      }
-      setView('signin');
-      showShortToast('Password reset successful! Please sign in.', 'success');
+      showShortToast('Unable to verify reset code with backend server. Please check your network connection.', 'error');
     } finally {
       setLoading(false);
     }
@@ -361,16 +353,16 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   ) : null;
 
   return (
-    <div className="auth-screen" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '20px' }}>
+    <div className="auth-screen">
       <div className="auth-glow-orb-1" />
       <div className="auth-glow-orb-2" />
       
       {/* Auth Card Container */}
-      <div className="auth-card" style={{ gridTemplateColumns: '1.08fr 0.92fr', maxWidth: 1000, width: '100%', maxHeight: '92vh', overflow: 'hidden' }}>
-        <div className="auth-form-side" style={{ padding: '32px 40px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div className="brand-header" style={{ marginBottom: 20 }}>
+      <div className="auth-card">
+        <div className="auth-form-side">
+          <div className="brand-header" style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="brand-logo-container brand-logo-container-light"><UrbanEyeLogo compact /></div>
-            <span className="brand-name brand-name-dark" style={{ fontSize: '1.25rem', fontWeight: 700 }}>Urban Eye</span>
+            <span className="brand-name brand-name-dark" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--garnet)' }}>Urban Eye</span>
           </div>
 
           <AlertBanner />
@@ -378,97 +370,96 @@ export default function AuthScreen({ onAuthenticated }: Props) {
           {/* SIGN IN VIEW */}
           {view === 'signin' && (
             <div className="fade-in">
-              <h2 style={{ fontSize: '1.5rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Welcome</h2>
-              <p className="auth-subtitle" style={{ fontSize: '0.9rem', margin: '0 0 20px 0', color: '#475569' }}>
+              <h2>Welcome</h2>
+              <p className="auth-subtitle">
                 Enter your registered credentials to access your urban planning workspace.
               </p>
 
-              <form className="auth-form" onSubmit={handleSignIn} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <form className="auth-form" onSubmit={handleSignIn} autoComplete="off">
                 <div className="input-group">
-                  <label htmlFor="si-user" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Email Address</label>
-                  <div className="input-wrapper" style={{ padding: '6px 12px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <EnvelopeIcon />
-                    <input id="si-user" type="email" autoComplete="off" placeholder="enter your email" value={siUser} onChange={e => setSiUser(e.target.value)} required style={{ fontSize: '0.86rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 26 }} />
+                  <label htmlFor="si-user">Email Address</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><EnvelopeIcon /></span>
+                    <input id="si-user" type="email" autoComplete="off" placeholder="enter your email" value={siUser} onChange={e => setSiUser(e.target.value.toLowerCase())} required style={{ textTransform: 'lowercase' }} />
                   </div>
                 </div>
 
                 <div className="input-group">
-                  <label htmlFor="si-pass" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Password</label>
-                  <div className="input-wrapper" style={{ padding: '6px 12px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <LockIcon />
-                    <input id="si-pass" type={showSiPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Enter password" value={siPass} onChange={e => setSiPass(e.target.value)} required style={{ fontSize: '0.86rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 26, paddingRight: 36 }} />
-                    <button type="button" className="input-icon-right" onClick={() => setShowSiPass(!showSiPass)} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                  <label htmlFor="si-pass">Password</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><LockIcon /></span>
+                    <input id="si-pass" type={showSiPass ? 'text' : 'password'} autoComplete="new-password" minLength={8} placeholder="Enter password" value={siPass} onChange={e => setSiPass(e.target.value)} required style={{ paddingRight: 44 }} />
+                    <button type="button" className="input-icon-right" onClick={() => setShowSiPass(!showSiPass)}>
                       {showSiPass ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
                 </div>
 
                 <div className="auth-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 }}>
-                  <label className="remember-me" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.85rem', color: '#334155' }}>
+                  <label className="remember-me">
                     <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me
                   </label>
-                  <button type="button" className="forgot-link" style={{ fontSize: '0.85rem', color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('forgot'); setAlert(null); }}>
+                  <button type="button" className="forgot-link" onClick={() => { setView('forgot'); setAlert(null); }}>
                     Forgot password?
                   </button>
                 </div>
-                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.95rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                <button type="submit" className="btn-submit" disabled={loading}>
                   {loading ? 'Signing in...' : 'Sign In'}
                 </button>
               </form>
-              <div className="auth-switch" style={{ marginTop: 18, fontSize: '0.88rem', color: '#475569' }}>
-                Don't have an account? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signup'); setAlert(null); }}>Sign Up Now</button>
+              <div className="auth-switch">
+                Don't have an account? <button type="button" onClick={() => { setView('signup'); setAlert(null); }}>Sign Up Now</button>
               </div>
             </div>
           )}
 
-          {/* SIGN UP VIEW  */}
+          {/* SIGN UP VIEW */}
           {view === 'signup' && (
-            <div className="fade-in" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', maxHeight: '80vh', overflowY: 'auto', paddingRight: 6 }}>
+            <div className="fade-in">
               <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>
                 <button
                   type="button"
                   onClick={() => { setView('signin'); setAlert(null); }}
-                  style={{ background: 'none', border: 'none', color: '#7C1D24', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--crimson)', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                 >
                   ← Back to Sign In
                 </button>
               </div>
 
-              <h2 style={{ fontSize: '1.5rem', margin: '0 0 4px 0', textAlign: 'center', color: '#0f172a', fontWeight: 700 }}>Create an account</h2>
-              <p className="auth-subtitle" style={{ fontSize: '0.85rem', margin: '0 0 16px 0', textAlign: 'center', color: '#475569' }}>
-                Fill in your details below to register your planner profile.
+              <h2>Create an account</h2>
+              <p className="auth-subtitle">
+                Fill in your details below to register.
               </p>
 
-              <form className="auth-form" onSubmit={handleSignUp} autoComplete="off" style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <form className="auth-form" onSubmit={handleSignUp} autoComplete="off">
                 {/* Full Name */}
-                <div className="input-group" style={{ width: '100%' }}>
-                  <label htmlFor="su-name" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Full Name</label>
-                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <UserIcon />
-                    <input id="su-name" type="text" autoComplete="off" placeholder="e.g. Joy Nduta" value={suName} onChange={e => setSuName(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.88rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 28 }} />
+                <div className="input-group">
+                  <label htmlFor="su-name">Full Name</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><UserIcon /></span>
+                    <input id="su-name" type="text" autoComplete="off" placeholder="e.g. Joy Nduta" value={suName} onChange={e => setSuName(e.target.value)} required />
                   </div>
                 </div>
 
                 {/* Email Address */}
-                <div className="input-group" style={{ width: '100%' }}>
-                  <label htmlFor="su-email" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Email</label>
-                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <EnvelopeIcon />
-                    <input id="su-email" type="email" autoComplete="off" placeholder="planner@agency.go.ke" value={suEmail} onChange={e => setSuEmail(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.88rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 28 }} />
+                <div className="input-group">
+                  <label htmlFor="su-email">Email</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><EnvelopeIcon /></span>
+                    <input id="su-email" type="email" autoComplete="off" placeholder="planner@agency.go.ke" value={suEmail} onChange={e => setSuEmail(e.target.value.toLowerCase())} required style={{ textTransform: 'lowercase' }} />
                   </div>
                 </div>
 
                 {/* Role */}
-                <div className="input-group" style={{ width: '100%' }}>
-                  <label htmlFor="su-role" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>Role</label>
-                  <div className="input-wrapper" style={{ width: '100%', padding: '8px 14px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <BriefcaseIcon />
+                <div className="input-group">
+                  <label htmlFor="su-role">Role</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><BriefcaseIcon /></span>
                     <select
                       id="su-role"
                       value={suRole}
                       onChange={e => setSuRole(e.target.value)}
                       required
-                      style={{ border: 'none', background: 'transparent', width: '100%', cursor: 'pointer', paddingLeft: 28, fontSize: '0.88rem', color: suRole ? '#0f172a' : '#64748b' }}
                     >
                       <option value="" disabled>Choose your role...</option>
                       <option value="Urban Planner">Urban Planner</option>
@@ -479,37 +470,37 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                   </div>
                 </div>
 
-                {/* Password Input + Inset Eye Icon */}
-                <div className="input-group" style={{ width: '100%' }}>
-                  <label htmlFor="su-pass" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Password</label>
-                  <div className="input-wrapper" style={{ width: '100%', padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <LockIcon />
-                    <input id="su-pass" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Enter password" value={suPass} onChange={e => setSuPass(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30, paddingRight: 40 }} />
-                    <button type="button" className="input-icon-right" onClick={() => setShowSuPass(!showSuPass)} style={{ position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                {/* Password Input  */}
+                <div className="input-group">
+                  <label htmlFor="su-pass">Password</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><LockIcon /></span>
+                    <input id="su-pass" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={8} placeholder="Enter password" value={suPass} onChange={e => setSuPass(e.target.value)} required style={{ paddingRight: 44 }} />
+                    <button type="button" className="input-icon-right" onClick={() => setShowSuPass(!showSuPass)}>
                       {showSuPass ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
-                  <small style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, display: 'block' }}>
-                    Password format: min 6 chars, uppercase (A-Z), lowercase (a-z), number (0-9), &amp; special char.
+                  <small style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2, display: 'block' }}>
+                    Min 8 chars: uppercase (A-Z), lowercase (a-z), number (0-9), &amp; special char.
                   </small>
                 </div>
 
                 {/* Confirm Password */}
-                <div className="input-group" style={{ width: '100%' }}>
-                  <label htmlFor="su-confirm" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Confirm Password</label>
-                  <div className="input-wrapper" style={{ width: '100%', padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <LockIcon />
-                    <input id="su-confirm" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={6} placeholder="Re-enter password" value={suConfirm} onChange={e => setSuConfirm(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                <div className="input-group">
+                  <label htmlFor="su-confirm">Confirm Password</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><LockIcon /></span>
+                    <input id="su-confirm" type={showSuPass ? 'text' : 'password'} autoComplete="new-password" minLength={8} placeholder="Re-enter password" value={suConfirm} onChange={e => setSuConfirm(e.target.value)} required />
                   </div>
                 </div>
 
-                <button type="submit" className="btn-submit" disabled={loading} style={{ width: '100%', marginTop: 8, padding: '14px 20px', fontSize: '0.95rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
-                  {loading ? 'Creating account...' : 'Submit'}
+                <button type="submit" className="btn-submit" disabled={loading}>
+                  {loading ? 'Creating account...' : 'Complete Registration'}
                 </button>
               </form>
 
-              <div className="auth-switch" style={{ marginTop: 16, fontSize: '0.88rem', color: '#475569' }}>
-                Already have an account? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signin'); setAlert(null); }}>Sign In Now</button>
+              <div className="auth-switch">
+                Already have an account? <button type="button" onClick={() => { setView('signin'); setAlert(null); }}>Sign In Now</button>
               </div>
             </div>
           )}
@@ -517,61 +508,81 @@ export default function AuthScreen({ onAuthenticated }: Props) {
           {/* FORGOT PASSWORD VIEW */}
           {view === 'forgot' && (
             <div className="fade-in">
-              <h2 style={{ fontSize: '1.45rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Reset Password</h2>
-              <p className="auth-subtitle" style={{ fontSize: '0.88rem', margin: '0 0 18px 0', color: '#475569' }}>
+              <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', marginBottom: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => { setView('signin'); setAlert(null); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--crimson)', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  ← Back to Sign In
+                </button>
+              </div>
+
+              <h2>Reset Password</h2>
+              <p className="auth-subtitle">
                 Enter your registered email address to receive a 4-digit verification code.
               </p>
 
-              <form className="auth-form" onSubmit={handleForgotSend} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <form className="auth-form" onSubmit={handleForgotSend} autoComplete="off">
                 <div className="input-group">
-                  <label htmlFor="f-email" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>Account Email Address</label>
-                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <EnvelopeIcon />
-                    <input id="f-email" type="email" autoComplete="off" placeholder="name@agency.go.ke" value={fEmail} onChange={e => setFEmail(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                  <label htmlFor="f-email">Account Email Address</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><EnvelopeIcon /></span>
+                    <input id="f-email" type="email" autoComplete="off" placeholder="name@agency.go.ke" value={fEmail} onChange={e => setFEmail(e.target.value.toLowerCase())} required style={{ textTransform: 'lowercase' }} />
                   </div>
                 </div>
-                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.92rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                <button type="submit" className="btn-submit" disabled={loading}>
                   {loading ? 'Sending Email...' : 'Send Password Reset Email'}
                 </button>
               </form>
 
-              <div className="auth-switch" style={{ marginTop: 18, fontSize: '0.88rem', color: '#475569' }}>
-                Remembered your password? <button type="button" style={{ color: '#7C1D24', fontWeight: 700 }} onClick={() => { setView('signin'); setAlert(null); }}>Back to Sign In</button>
+              <div className="auth-switch">
+                Remembered your password? <button type="button" onClick={() => { setView('signin'); setAlert(null); }}>Back to Sign In</button>
               </div>
             </div>
           )}
 
-          {/* RESET PASSWORD  */}
+          {/* RESET PASSWORD */}
           {view === 'reset' && (
             <div className="fade-in">
-              <h2 style={{ fontSize: '1.45rem', margin: '0 0 6px 0', color: '#0f172a', fontWeight: 700 }}>Enter 4-Digit Code</h2>
-              <p className="auth-subtitle" style={{ fontSize: '0.88rem', margin: '0 0 18px 0', color: '#475569' }}>
+              <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', marginBottom: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => { setView('forgot'); setAlert(null); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--crimson)', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  ← Back to Email Verification
+                </button>
+              </div>
+
+              <h2>Enter 4-Digit Code</h2>
+              <p className="auth-subtitle">
                 4-Digit reset code sent to {fEmail}. Enter the code below along with your new password.
               </p>
 
-              <form className="auth-form" onSubmit={handleResetSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <form className="auth-form" onSubmit={handleResetSubmit} autoComplete="off">
                 <div className="input-group">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label htmlFor="r-code" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>4-Digit Code</label>
-                    <button type="button" onClick={handleResendCode} style={{ background: 'none', border: 'none', color: '#7C1D24', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                    <label htmlFor="r-code">4-Digit Code</label>
+                    <button type="button" onClick={handleResendCode} style={{ background: 'none', border: 'none', color: 'var(--crimson)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
                       Resend Code
                     </button>
                   </div>
-                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <KeyIcon />
-                    <input id="r-code" type="text" maxLength={6} placeholder="e.g. 4829" value={resetCode} onChange={e => setResetCode(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><KeyIcon /></span>
+                    <input id="r-code" type="text" maxLength={6} placeholder="e.g. 4829" value={resetCode} onChange={e => setResetCode(e.target.value)} required />
                   </div>
                 </div>
 
                 <div className="input-group">
-                  <label htmlFor="r-pass" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>New Password</label>
-                  <div className="input-wrapper" style={{ padding: '12px 18px', borderRadius: 9999, background: '#fff', border: '1px solid #cbd5e1', position: 'relative' }}>
-                    <LockIcon />
-                    <input id="r-pass" type="password" autoComplete="new-password" minLength={6} placeholder="Enter new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ fontSize: '0.92rem', color: '#0f172a', border: 'none', background: 'transparent', paddingLeft: 30 }} />
+                  <label htmlFor="r-pass">New Password</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon-left"><LockIcon /></span>
+                    <input id="r-pass" type="password" autoComplete="new-password" minLength={8} placeholder="Enter new password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
                   </div>
                 </div>
 
-                <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '14px 20px', fontSize: '0.92rem', fontWeight: 700, background: 'linear-gradient(135deg, #4A1E14 0%, #7C1D24 45%, #A63A3A 80%, #C96B6B 100%)', border: 'none', borderRadius: 9999, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 29, 36, 0.35)' }}>
+                <button type="submit" className="btn-submit" disabled={loading}>
                   {loading ? 'Updating Password...' : 'Update Password & Sign In'}
                 </button>
               </form>
@@ -580,7 +591,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         </div>
 
         {/* BRAND SIDE */}
-        <div className="auth-brand-side" style={{ padding: '36px 40px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="auth-brand-side">
           <div className="brand-header">
             <div className="brand-logo-container"><UrbanEyeLogo /></div>
             <span className="brand-name">Urban Eye</span>
@@ -598,7 +609,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
           </div>
           <div className="brand-footer" style={{ fontSize: '0.8rem' }}>
             <div>Official Data Acquisition Pipeline</div>
-            <div style={{ opacity: 0.65, marginTop: 2 }}>KNBS Census &amp; National Police Service Integrated</div>
+            <div style={{ opacity: 0.65, marginTop: 2 }}>KNBS Census &amp; National Crime Research center, NPS ,OSM and HDX </div>
           </div>
         </div>
       </div>

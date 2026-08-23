@@ -42,51 +42,17 @@ interface Props {
   radiusKm: number;
 }
 
-const INFRA_CONFIG: Record<string, { bg: string; iconSvg: string }> = {
-  Hospital: {
-    bg: '#ef4444',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M12 5v14M5 12h14"/></svg>`,
-  },
-  School: {
-    bg: '#f97316',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5 13.18v4L12 21l7-3.82v-4"/></svg>`,
-  },
-  Road: {
-    bg: '#3b82f6',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M4 22l4-20M16 22l4-20M12 2v4M12 10v4M12 18v4"/></svg>`,
-  },
-  'Transit Hub': {
-    bg: '#3b82f6',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M6 11h12M9 19v2M15 19v2M8 15h.01M16 15h.01"/></svg>`,
-  },
-  'Police Station': {
-    bg: '#1e293b',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-  },
-  Power: {
-    bg: '#eab308',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
-  },
-  Water: {
-    bg: '#06b6d4',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>`,
-  },
-  Mall: {
-    bg: '#e65c5c',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>`,
-  },
+const INFRA_EMOJI: Record<string, string> = {
+  School: '🏫', Hospital: '🏥', Road: '🛣️', Power: '⚡', Water: '💧',
+  'Police Station': '🚓', 'Transit Hub': '🚌', Other: '🏗️',
 };
 
 function makeInfraIcon(type: string): L.DivIcon {
-  const cfg = INFRA_CONFIG[type] || {
-    bg: '#64748b',
-    iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>`,
-  };
   return L.divIcon({
     className: '',
-    html: `<div style="background:${cfg.bg};width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.4);border:2px solid #fff;">${cfg.iconSvg}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    html: `<div style="font-size:20px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.8));">${INFRA_EMOJI[type] || '📍'}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
 }
 
@@ -138,6 +104,7 @@ export default function MapPanel({
       zoom: 13,
       maxZoom: 19,
       zoomControl: true,
+      scrollWheelZoom: false,
       attributionControl: false,
     });
     mapRef.current = map;
@@ -162,7 +129,7 @@ export default function MapPanel({
     };
   }, []);
 
-  // Update Tile Layer Preset
+  
   useEffect(() => {
     if (!mapRef.current) return;
     const preset = TILE_PRESETS[tilePreset] || TILE_PRESETS['OSM Buildings'];
@@ -193,30 +160,105 @@ export default function MapPanel({
     return () => { map.off('click', handler); };
   }, [activePinMode, onPinDrop, onDropPin]);
 
-  // Handle Location Search (Nominatim API)
+const KNOWN_SUBCOUNTY_COORDS: Record<string, [number, number]> = {
+  // Nairobi
+  'westlands': [-1.2676, 36.8080],
+  'kilimani': [-1.2921, 36.7865],
+  'lavington': [-1.2800, 36.7680],
+  'kibra': [-1.3133, 36.7886],
+  'karen': [-1.3197, 36.7065],
+  'langata': [-1.3458, 36.7589],
+  'kasarani': [-1.2229, 36.8973],
+  'embakasi': [-1.3211, 36.9142],
+  'cbd': [-1.286389, 36.817223],
+  'central': [-1.286389, 36.817223],
+  'parklands': [-1.2605, 36.8208],
+  'roysambu': [-1.2185, 36.8860],
+  'mathare': [-1.2600, 36.8580],
+  'dagoretti': [-1.2980, 36.7380],
+  'starehe': [-1.2780, 36.8380],
+  'kamukunji': [-1.2820, 36.8480],
+  'ruaraka': [-1.2380, 36.8780],
+  'makadara': [-1.3020, 36.8680],
+
+  // Mombasa
+  'nyali': [-4.0450, 39.7020],
+  'likoni': [-4.0830, 39.6580],
+  'changamwe': [-4.0300, 39.6300],
+  'kisauni': [-4.0050, 39.6880],
+  'bamburi': [-3.9850, 39.7150],
+  'mombasa island': [-4.0600, 39.6750],
+  'old town': [-4.0620, 39.6780],
+  'tudor': [-4.0400, 39.6600],
+  'mikindani': [-4.0150, 39.6200],
+  'jomvu': [-4.0080, 39.6120],
+  'mvita': [-4.0600, 39.6750],
+  'shanzu': [-3.9650, 39.7400],
+
+  // Eldoret
+  'eldoret cbd': [0.514277, 35.26978],
+  'pioneer': [0.5020, 35.2750],
+  'langas': [0.4850, 35.2850],
+  'huruma': [0.5280, 35.2520],
+  'kapseret': [0.4580, 35.2350],
+  'elgon view': [0.4950, 35.2650],
+  'annex': [0.5350, 35.2950],
+  'kimumu': [0.5520, 35.3050],
+  'chepkoilel': [0.5650, 35.3000],
+  'west indies': [0.5180, 35.2620],
+  'maili nne': [0.5400, 35.2400],
+  'munyaka': [0.5250, 35.3020],
+  'kipkaren': [0.5100, 35.2400],
+};
+
+  // Handle Location Search (Local sub-county coordinates + Nominatim API fallback)
   const handleLocationSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
+    const queryClean = searchQuery.trim().toLowerCase();
+    if (!queryClean) return;
     setSearchLoading(true);
+
+    // 1. Check Local Known Sub-County Coordinates Index
+    const matchedKey = Object.keys(KNOWN_SUBCOUNTY_COORDS).find(
+      k => queryClean.includes(k) || k.includes(queryClean)
+    );
+
+    if (matchedKey) {
+      const [lat, lng] = KNOWN_SUBCOUNTY_COORDS[matchedKey];
+      const formattedName = matchedKey.charAt(0).toUpperCase() + matchedKey.slice(1);
+      setSearchResultName(formattedName);
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lng], 15, { duration: 1.2 });
+      }
+      if (onDropPin) onDropPin({ lat, lng });
+      if (onPinDrop) onPinDrop(lat, lng);
+      setSearchLoading(false);
+      return;
+    }
+
+    // 2. Query OpenStreetMap Nominatim API
     try {
       const q = `${searchQuery.trim()}, ${city}, Kenya`;
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`, {
+        headers: { 'Accept-Language': 'en' }
+      });
       const data = await res.json();
       if (data && data.length > 0) {
         const item = data[0];
         const lat = parseFloat(item.lat);
         const lng = parseFloat(item.lon);
-        setSearchResultName(item.display_name.split(',')[0]);
+        const placeName = item.display_name.split(',')[0];
+        setSearchResultName(placeName);
         if (mapRef.current) {
           mapRef.current.flyTo([lat, lng], 15, { duration: 1.2 });
         }
         if (onDropPin) onDropPin({ lat, lng });
         if (onPinDrop) onPinDrop(lat, lng);
       } else {
-        alert(`Location "${searchQuery}" not found in ${city}.`);
+        alert(`Location "${searchQuery}" not found in ${city}. Please try searching a sub-county name e.g. Westlands, Kibra, Nyali, Pioneer.`);
       }
     } catch (_) {
-      alert('Search failed. Please try again.');
+      alert(`Unable to search "${searchQuery}". Please check your internet connection or try searching a sub-county name e.g. Westlands, Kilimani, Likoni.`);
     } finally {
       setSearchLoading(false);
     }
@@ -237,7 +279,7 @@ export default function MapPanel({
       try {
         const hLayer = L.heatLayer(heatPoints, {
           radius: 25, blur: 15, maxZoom: 17,
-          gradient: { 0.2: '#3b82f6', 0.4: '#10b981', 0.6: '#f59e0b', 0.8: '#f97316', 1.0: '#ef4444' },
+          gradient: { 0.2: '#e65c5c', 0.4: '#d97706', 0.6: '#f59e0b', 0.8: '#ea580c', 1.0: '#dc2626' },
         });
         hLayer.addTo(map);
         heatLayerRef.current = hLayer;
@@ -262,9 +304,9 @@ export default function MapPanel({
 
         const isSelected = activeZone === String(z.id) || activeZone === z.name;
         const poly = L.polygon(latLngs, {
-          color: isSelected ? '#ef4444' : '#3b82f6',
+          color: isSelected ? '#ef4444' : '#34d399',
           weight: isSelected ? 3 : 1.5,
-          fillColor: isSelected ? '#ef4444' : '#3b82f6',
+          fillColor: isSelected ? '#ef4444' : '#34d399',
           fillOpacity: isSelected ? 0.25 : 0.08,
           dashArray: isSelected ? undefined : '4, 4',
         });
@@ -292,9 +334,8 @@ export default function MapPanel({
     infraMarkersRef.current.forEach(m => map.removeLayer(m));
     infraMarkersRef.current = [];
 
-    const activeInfra = (infraMarkers && infraMarkers.length > 0) ? infraMarkers : getGoogleStyleInfraMarkers(city);
-    if (layers.infrastructure) {
-      activeInfra.forEach(inf => {
+    if (layers.infrastructure && infraMarkers.length > 0) {
+      infraMarkers.forEach(inf => {
         const marker = L.marker([inf.lat, inf.lng], { icon: makeInfraIcon(inf.infra_type) });
         marker.bindPopup(`<strong>${inf.name}</strong><br/>Type: ${inf.infra_type}`);
         marker.addTo(map);
@@ -303,7 +344,7 @@ export default function MapPanel({
     }
   }, [layers.infrastructure, infraMarkers]);
 
-  // Handle Dropped Pin & Radius Circle
+  // Handles Dropped Pin & Radius Circle
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -337,9 +378,10 @@ export default function MapPanel({
   };
 
   return (
-    <div className="map-panel" style={{ position: 'relative', width: '100%', height: '100%', minHeight: 440 }}>
-      {/* Floating Search & Control Bar Overlay */}
-      <div className="map-overlay-controls" style={{ gap: 12, padding: '12px 16px' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 440, borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(201, 107, 107, 0.25)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}>
+      {/* Floating Search & Layer Overlay Bar */}
+      <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', pointerEvents: 'auto' }}>
+        
         {/* Nominatim Search Input */}
         <form onSubmit={handleLocationSearch} style={{ display: 'flex', gap: 6, flex: 1, maxWidth: 360 }}>
           <input
@@ -349,48 +391,110 @@ export default function MapPanel({
             onChange={e => setSearchQuery(e.target.value)}
             style={{
               flex: 1,
-              background: 'rgba(20, 24, 35, 0.9)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
+              background: 'rgba(18, 5, 8, 0.92)',
+              border: '1px solid rgba(201, 107, 107, 0.35)',
               borderRadius: 8,
-              padding: '6px 12px',
-              color: '#fff',
+              padding: '8px 12px',
+              color: '#fee1e1',
               fontSize: '0.82rem',
               outline: 'none',
-              backdropFilter: 'blur(8px)',
+              backdropFilter: 'blur(12px)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
             }}
           />
           <button
             type="submit"
             disabled={searchLoading}
             style={{
-              background: '#e65c5c',
-              border: 'none',
+              background: 'linear-gradient(135deg, rgba(124,29,36,0.8), rgba(166,58,58,0.6))',
+              border: '1px solid rgba(201,107,107,0.5)',
               borderRadius: 8,
-              padding: '6px 14px',
+              padding: '8px 14px',
               color: '#fff',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '0.8rem',
               cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(124, 29, 36, 0.4)',
             }}
           >
             {searchLoading ? '...' : 'Search'}
           </button>
         </form>
 
-        <div className="map-layer-pills">
-          <button className={`map-pill-btn${layers.heatmap ? ' pill-active-heat' : ''}`} onClick={() => toggleLayer('heatmap')}>
+        {/* Layer Toggles (Distinct Vibrant Map Colors: Heatmap=Red/Orange, Infra=Cyan, Zones=Emerald Green) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => toggleLayer('heatmap')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 20,
+              border: layers.heatmap ? '1px solid #E93B3B' : '1px solid rgba(248, 113, 113, 0.3)',
+              background: layers.heatmap ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.9), rgba(234, 88, 12, 0.8))' : 'rgba(18, 5, 8, 0.88)',
+              color: layers.heatmap ? '#fff' : '#f87171',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              boxShadow: layers.heatmap ? '0 4px 12px rgba(220, 38, 38, 0.4)' : '0 2px 6px rgba(0,0,0,0.3)',
+            }}
+          >
             🔥 Heatmap ({incidents.length})
           </button>
-          <button className={`map-pill-btn${layers.infrastructure ? ' pill-active-infra' : ''}`} onClick={() => toggleLayer('infrastructure')}>
+          <button
+            onClick={() => toggleLayer('infrastructure')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 20,
+              border: layers.infrastructure ? '1px solid #38bdf8' : '1px solid rgba(56, 189, 248, 0.3)',
+              background: layers.infrastructure ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.9), rgba(37, 99, 235, 0.8))' : 'rgba(18, 5, 8, 0.88)',
+              color: layers.infrastructure ? '#fff' : '#38bdf8',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              boxShadow: layers.infrastructure ? '0 4px 12px rgba(14, 165, 233, 0.4)' : '0 2px 6px rgba(0,0,0,0.3)',
+            }}
+          >
             🏗️ Infrastructure ({infraMarkers.length})
           </button>
-          <button className={`map-pill-btn${layers.zones ? ' pill-active-zones' : ''}`} onClick={() => toggleLayer('zones')}>
-            🗺️ Zones ({zones.length})
+          <button
+            onClick={() => toggleLayer('zones')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 20,
+              border: layers.zones ? '1px solid #34d399' : '1px solid rgba(52, 211, 153, 0.3)',
+              background: layers.zones ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.8))' : 'rgba(18, 5, 8, 0.88)',
+              color: layers.zones ? '#fff' : '#34d399',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              boxShadow: layers.zones ? '0 4px 12px rgba(16, 185, 129, 0.4)' : '0 2px 6px rgba(0,0,0,0.3)',
+            }}
+          >
+             Zones ({zones.length})
           </button>
         </div>
 
-        <div className="map-tile-selector">
-          <select value={tilePreset} onChange={e => setTilePreset(e.target.value)} className="map-tile-select">
+        {/* Tile Preset Dropdown */}
+        <div>
+          <select
+            value={tilePreset}
+            onChange={e => setTilePreset(e.target.value)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              background: 'rgba(30, 8, 12, 0.95)',
+              color: '#fee1e1',
+              border: '1px solid rgba(201, 107, 107, 0.35)',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            }}
+          >
             <option value="OSM Buildings">🏢 Buildings & POIs (OSM)</option>
             <option value="Esri Streets">🛣️ Detailed Streets (Esri)</option>
             <option value="Carto Voyager">🗺️ Carto Voyager</option>
@@ -399,8 +503,8 @@ export default function MapPanel({
       </div>
 
       {activePinMode && (
-        <div className="pin-mode-banner" style={{ zIndex: 1000 }}>
-          📍 DROP PIN ACTIVE — Click anywhere on the map to inspect location
+        <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 500, background: 'rgba(124, 29, 36, 0.92)', border: '1px solid rgba(248, 113, 113, 0.6)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: '0.82rem', fontWeight: 700, textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>
+          📍 DROP PIN  — Click anywhere on the map to inspect location
           {searchResultName && ` | Near: "${searchResultName}"`}
         </div>
       )}
@@ -408,20 +512,4 @@ export default function MapPanel({
       <div ref={containerRef} className="leaflet-map-container" style={{ width: '100%', height: '100%', minHeight: 440 }} />
     </div>
   );
-}
-
-function getGoogleStyleInfraMarkers(city: string): InfraMarker[] {
-  const center = CITY_CENTERS[city] || [-1.286389, 36.817223];
-  return [
-    { id: 1, lat: center[0] + 0.008, lng: center[1] + 0.005, infra_type: 'Hospital', name: `${city} General Referral Hospital` },
-    { id: 2, lat: center[0] - 0.006, lng: center[1] - 0.007, infra_type: 'School', name: `St. Mark Academy ${city}` },
-    { id: 3, lat: center[0] + 0.012, lng: center[1] - 0.004, infra_type: 'Police Station', name: `${city} Central Police Division` },
-    { id: 4, lat: center[0] - 0.010, lng: center[1] + 0.011, infra_type: 'Transit Hub', name: `${city} Central Bus Terminal & Railway Station` },
-    { id: 5, lat: center[0] + 0.004, lng: center[1] + 0.014, infra_type: 'Mall', name: `${city} Commercial Shopping Center` },
-    { id: 6, lat: center[0] - 0.015, lng: center[1] - 0.012, infra_type: 'Power', name: `KPLC Substation - ${city} Grid` },
-    { id: 7, lat: center[0] + 0.018, lng: center[1] + 0.009, infra_type: 'Water', name: `Municipal Water Treatment Facility` },
-    { id: 8, lat: center[0] - 0.003, lng: center[1] + 0.002, infra_type: 'Road', name: `A104 Dual Carriageway Highway Interchange` },
-    { id: 9, lat: center[0] + 0.009, lng: center[1] - 0.015, infra_type: 'School', name: `${city} Technical Training Institute` },
-    { id: 10, lat: center[0] - 0.009, lng: center[1] - 0.002, infra_type: 'Hospital', name: `Avenue Health & Emergency Clinic` },
-  ];
 }

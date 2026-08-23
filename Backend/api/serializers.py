@@ -39,7 +39,7 @@ class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     city = serializers.ChoiceField(choices=UserProfile.CITY_CHOICES, default="Nairobi")
     role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, default="Urban Planner")
-    password = serializers.CharField(min_length=6, write_only=True, required=True)
+    password = serializers.CharField(min_length=8, write_only=True, required=True)
     
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
@@ -78,8 +78,8 @@ class RegisterSerializer(serializers.Serializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    password = serializers.CharField(min_length=6, write_only=True, required=True)
-    confirm_password = serializers.CharField(min_length=6, write_only=True, required=True)
+    password = serializers.CharField(min_length=8, write_only=True, required=True)
+    confirm_password = serializers.CharField(min_length=8, write_only=True, required=True)
 
     def validate_email(self, value):
         if not User.objects.filter(email__iexact=value).exists():
