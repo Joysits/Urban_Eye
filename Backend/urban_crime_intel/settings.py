@@ -176,8 +176,11 @@ DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://local
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
-    if origin.strip()
+    if origin.strip() and (origin.strip().startswith("http://") or origin.strip().startswith("https://"))
 ]
+
+if not CORS_ALLOWED_ORIGINS or os.getenv("CORS_ALLOW_ALL_ORIGINS", "true").lower() in {"true", "1"}:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 # Email Configuration
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
