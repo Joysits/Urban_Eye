@@ -8,6 +8,7 @@ interface Props {
 }
 
 export default function ReportGeneratorView({ currentUser }: Props) {
+  const [savedAreaReports, setSavedAreaReports] = useState<ReportData[]>([]);
   const [savedComparisons, setSavedComparisons] = useState<ComparisonReportData[]>([]);
   const [savedProposals, setSavedProposals] = useState<any[]>([]);
 
@@ -16,7 +17,24 @@ export default function ReportGeneratorView({ currentUser }: Props) {
   // Unified load effect: user-scoped with fallback
   useEffect(() => {
     try {
-      // 1. Zone Comparisons
+      // 1. Area Intelligence Reports
+      let areaReports: ReportData[] = [];
+      const storedAreaUser = localStorage.getItem(`saved_area_reports_${userKey}`);
+      const storedAreaGlobal = localStorage.getItem('urban_eye_saved_area_reports');
+      const storedAreaGuest = localStorage.getItem('saved_area_reports_guest');
+
+      if (storedAreaUser) {
+        try { areaReports = JSON.parse(storedAreaUser); } catch {}
+      }
+      if ((!areaReports || areaReports.length === 0) && storedAreaGlobal) {
+        try { areaReports = JSON.parse(storedAreaGlobal); } catch {}
+      }
+      if ((!areaReports || areaReports.length === 0) && storedAreaGuest) {
+        try { areaReports = JSON.parse(storedAreaGuest); } catch {}
+      }
+      setSavedAreaReports(Array.isArray(areaReports) ? areaReports : []);
+
+      // 2. Zone Comparisons
       let comps: ComparisonReportData[] = [];
       const storedCompUser = localStorage.getItem(`saved_zone_comparisons_${userKey}`);
       const storedCompGlobal = localStorage.getItem('urban_eye_saved_comparisons');
@@ -33,7 +51,7 @@ export default function ReportGeneratorView({ currentUser }: Props) {
       }
       setSavedComparisons(Array.isArray(comps) ? comps : []);
 
-      // 2. Planning Proposals & Drafts
+      // 3. Planning Proposals & Drafts
       let propsList: any[] = [];
       const storedPropUser = localStorage.getItem(`saved_planning_proposals_${userKey}`);
       const storedPropGlobal = localStorage.getItem('urban_eye_saved_plans');
@@ -54,10 +72,18 @@ export default function ReportGeneratorView({ currentUser }: Props) {
       }
       setSavedProposals(Array.isArray(propsList) ? propsList : []);
     } catch (e) {
+      setSavedAreaReports([]);
       setSavedComparisons([]);
       setSavedProposals([]);
     }
   }, [userKey]);
+
+  const handleDeleteAreaReport = (zoneName: string) => {
+    const updated = savedAreaReports.filter(r => (r.zone_name || r.title) !== zoneName);
+    setSavedAreaReports(updated);
+    localStorage.setItem(`saved_area_reports_${userKey}`, JSON.stringify(updated));
+    localStorage.setItem('urban_eye_saved_area_reports', JSON.stringify(updated));
+  };
 
   const handleDeleteComparison = (id: string) => {
     const updated = savedComparisons.filter(c => c.id !== id);
@@ -75,11 +101,14 @@ export default function ReportGeneratorView({ currentUser }: Props) {
   };
 
   const handleClearAllSaved = () => {
+    localStorage.removeItem(`saved_area_reports_${userKey}`);
     localStorage.removeItem(`saved_zone_comparisons_${userKey}`);
     localStorage.removeItem(`saved_planning_proposals_${userKey}`);
+    localStorage.removeItem('urban_eye_saved_area_reports');
     localStorage.removeItem('urban_eye_saved_comparisons');
     localStorage.removeItem('urban_eye_saved_plans');
     localStorage.removeItem('smart_urban_saved_plans');
+    setSavedAreaReports([]);
     setSavedComparisons([]);
     setSavedProposals([]);
   };
@@ -150,7 +179,7 @@ export default function ReportGeneratorView({ currentUser }: Props) {
     doc.save(`${cleanName}_report.pdf`);
   };
 
-  const totalSaved = savedComparisons.length + savedProposals.length;
+  const totalSaved = savedAreaReports.length + savedComparisons.length + savedProposals.length;
 
   return (
     <div className="reports-page-skyline fade-in" style={{ padding: '20px 24px', fontFamily: 'Inter, sans-serif' }}>
@@ -184,10 +213,59 @@ export default function ReportGeneratorView({ currentUser }: Props) {
 
         {totalSaved === 0 ? (
           <div style={{ background: '#ffffff', padding: '36px 24px', borderRadius: 16, border: '1px dashed rgba(124, 29, 36, 0.3)', textAlign: 'center', color: '#7c1d24', fontFamily: 'Inter, sans-serif', fontSize: '0.88rem', lineHeight: 1.5, boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
-            No saved proposals or reports yet. When you click <strong>&quot;Save Proposal&quot;</strong> in <strong>Development Planning</strong> or click <strong>&quot;Save Comparison to Report&quot;</strong> in <strong>Area Analysis</strong>, your saved documents will instantly appear here for immediate PDF download.
+            No saved proposals or reports yet. When you click <strong>&quot;Save Proposal&quot;</strong> in <strong>Development Planning</strong> or click <strong>&quot;Export PDF Report&quot;</strong> in <strong>Area Intelligence</strong>, your saved documents will instantly appear here for immediate PDF download.
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            {/* Render Saved Area Intelligence Reports */}
+            {savedAreaReports.map((report, idx) => (
+              <div key={idx} style={{ background: '#ffffff', padding: 20, borderRadius: 16, border: '1px solid rgba(124, 29, 36, 0.15)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ color: '#7c1d24', fontSize: '0.68rem', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>
+                      AREA INTELLIGENCE REPORT ({report.city || 'NAIROBI'})
+                    </span>
+                    <button
+                      onClick={() => handleDeleteAreaReport(report.zone_name || report.title)}
+                      title="Delete Saved Report"
+                      style={{ background: '#fee2e2', border: '1px solid rgba(220, 38, 38, 0.3)', color: '#dc2626', borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <h4 style={{ fontSize: '1.05rem', color: '#1c0507', margin: '0 0 8px 0', fontFamily: 'Outfit, sans-serif', fontWeight: 800 }}>
+                    {report.zone_name || report.title || `${report.city} Safety Report`}
+                  </h4>
+                  <div style={{ color: '#592328', fontSize: '0.78rem', lineHeight: 1.45, marginBottom: 14, fontFamily: 'Inter, sans-serif' }}>
+                    <div><strong>Risk Score:</strong> {report.risk_score || 0}% (Safety Index: {100 - (report.risk_score || 0)})</div>
+                    <div><strong>Recorded Incidents:</strong> {report.total_incidents || 0} Total Incidents</div>
+                    <small style={{ display: 'block', color: '#7a4d52', marginTop: 4 }}>Saved: {report.created_at ? new Date(report.created_at).toLocaleString() : 'Recently'}</small>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => downloadPdfReport(report)}
+                  style={{
+                    width: '100%',
+                    background: 'linear-gradient(135deg, #7c1d24, #a63a3a)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    letterSpacing: '0.5px',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(124, 29, 36, 0.25)',
+                    fontFamily: 'Outfit, sans-serif',
+                  }}
+                >
+                  DOWNLOAD AREA REPORT (PDF)
+                </button>
+              </div>
+            ))}
+
             {/* Render Saved Planning Proposals */}
             {savedProposals.map((prop, idx) => (
               <div key={prop.id || idx} style={{ background: '#ffffff', padding: 20, borderRadius: 16, border: '1px solid rgba(124, 29, 36, 0.15)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(124, 29, 36, 0.05)' }}>
@@ -258,7 +336,7 @@ export default function ReportGeneratorView({ currentUser }: Props) {
                     {comp.title || `${comp.zoneA_name || 'Zone A'} vs ${comp.zoneB_name || 'Zone B'}`}
                   </h4>
                   <div style={{ color: '#592328', fontSize: '0.78rem', lineHeight: 1.45, marginBottom: 14, fontFamily: 'Inter, sans-serif' }}>
-                    <div><strong>Summary:</strong> {comp.summary || 'Side-by-side comparative spatial analysis'}</div>
+                    <div><strong>Comparison:</strong> {comp.zoneA_name || 'Zone A'} vs {comp.zoneB_name || 'Zone B'}</div>
                     <small style={{ display: 'block', color: '#7a4d52', marginTop: 4 }}>Saved: {comp.created_at ? new Date(comp.created_at).toLocaleString() : 'Recently'}</small>
                   </div>
                 </div>

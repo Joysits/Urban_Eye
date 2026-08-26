@@ -34,9 +34,7 @@ export interface ComparisonReportData {
   density_diff: number;
 }
 
-/**
- * Generates and downloads a clean, styled Microsoft Word (.docx) document
- */
+
 export async function downloadDocxReport(report: ReportData) {
   const dateStr = report.created_at
     ? new Date(report.created_at).toLocaleDateString('en-KE', { dateStyle: 'full' })

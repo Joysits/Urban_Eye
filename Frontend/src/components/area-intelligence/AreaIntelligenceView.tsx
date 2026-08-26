@@ -17,7 +17,7 @@ const CITY_CENTERS_MAP: Record<string, [number, number]> = {
   Eldoret: [0.514277, 35.26978],
 };
 
-// Comprehensive Official Administrative Zones in Kenya (Nairobi, Mombasa, Eldoret)
+
 export const OFFICIAL_CITY_ZONES: Record<string, string[]> = {
   Eldoret: [
     'Eldoret CBD', 'Pioneer', 'Langas', 'Huruma', 'Kapseret',
@@ -99,7 +99,7 @@ export default function AreaIntelligenceView({ currentUser, currentCity, onCityC
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // Build official zones list whenever city changes
+ 
   useEffect(() => {
     const list = getOfficialZones(city);
     setZones(list);
@@ -108,7 +108,7 @@ export default function AreaIntelligenceView({ currentUser, currentCity, onCityC
     setDroppedPin(null);
   }, [city]);
 
-  // Fetch Analysis Detail (zone, pin, or searched location)
+  // Fetches Analysis Detail (zone, pin, or searched location)
   const fetchAnalysis = useCallback(() => {
     setAnalysisLoading(true);
     let url = `/api/analysis/detail/?city=${encodeURIComponent(city)}`;
@@ -266,6 +266,20 @@ export default function AreaIntelligenceView({ currentUser, currentCity, onCityC
 
     downloadPdfReport(reportObj);
 
+    // Save Area Intelligence Report to LocalStorage for Report Generator
+    try {
+      const userKey = (currentUser?.email || 'guest').toLowerCase();
+      const storageKey = `saved_area_reports_${userKey}`;
+      const existing = localStorage.getItem(storageKey);
+      const list = existing ? JSON.parse(existing) : [];
+      const updated = [reportObj, ...list.filter((r: any) => r.zone_name !== reportObj.zone_name || r.city !== reportObj.city)];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      localStorage.setItem('urban_eye_saved_area_reports', JSON.stringify(updated));
+      localStorage.setItem('saved_area_reports_guest', JSON.stringify(updated));
+    } catch (err) {
+      console.error(err);
+    }
+
     try {
       await fetch('/api/reports/generate_from_analysis/', {
         method: 'POST',
@@ -280,7 +294,7 @@ export default function AreaIntelligenceView({ currentUser, currentCity, onCityC
       });
       showToast('PDF downloaded & report saved!', 'success');
     } catch {
-      showToast('PDF downloaded successfully!', 'success');
+      showToast('PDF downloaded successfully & saved!', 'success');
     } finally {
       setExportLoading(false);
     }
@@ -692,7 +706,7 @@ function getCalculatedZoneData(
     recent_incidents: [
       { id: 101, category: 'Theft', severity: riskScore > 60 ? 'High' : 'Moderate', description: `Reported theft along main transit corridor in ${zoneName}` },
       { id: 102, category: 'Traffic & Mobility Disruptions', severity: 'Low', description: `Minor vehicular traffic congestion near ${zoneName} junction` },
-      { id: 103, category: 'Burglary', severity: 'Moderate', description: `Commercial security alert logged in ${zoneName}` },
+      { id: 103, category: 'Burglary', severity: 'Moderate', description: `Security alert ${zoneName}` },
     ] as any,
   };
 }
@@ -752,115 +766,6 @@ function generateSampleIncidents(city: string): IncidentPoint[] {
 export function getSubCountyInfrastructureList(zoneName: string, city: string) {
   const zLower = (zoneName || '').toLowerCase();
   
-  if (zLower.includes('westlands')) {
-    return [
-      { type: 'Police Station', count: 4 },
-      { type: 'Hospital', count: 8 },
-      { type: 'School', count: 18 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 6 },
-    ];
-  }
-  if (zLower.includes('cbd') || zLower.includes('central')) {
-    return [
-      { type: 'Police Station', count: 6 },
-      { type: 'Hospital', count: 12 },
-      { type: 'School', count: 14 },
-      { type: 'Power Substation', count: 4 },
-      { type: 'Transit Hub', count: 12 },
-    ];
-  }
-  if (zLower.includes('kibra')) {
-    return [
-      { type: 'Police Station', count: 2 },
-      { type: 'Hospital', count: 5 },
-      { type: 'School', count: 22 },
-      { type: 'Power Substation', count: 1 },
-      { type: 'Transit Hub', count: 5 },
-    ];
-  }
-  if (zLower.includes('kilimani') || zLower.includes('lavington')) {
-    return [
-      { type: 'Police Station', count: 3 },
-      { type: 'Hospital', count: 7 },
-      { type: 'School', count: 16 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 4 },
-    ];
-  }
-  if (zLower.includes('karen') || zLower.includes('langata')) {
-    return [
-      { type: 'Police Station', count: 3 },
-      { type: 'Hospital', count: 4 },
-      { type: 'School', count: 14 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 3 },
-    ];
-  }
-  if (zLower.includes('embakasi')) {
-    return [
-      { type: 'Police Station', count: 5 },
-      { type: 'Hospital', count: 9 },
-      { type: 'School', count: 28 },
-      { type: 'Power Substation', count: 3 },
-      { type: 'Transit Hub', count: 8 },
-    ];
-  }
-  if (zLower.includes('kasarani') || zLower.includes('roysambu')) {
-    return [
-      { type: 'Police Station', count: 4 },
-      { type: 'Hospital', count: 6 },
-      { type: 'School', count: 24 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 6 },
-    ];
-  }
-  if (zLower.includes('nyali')) {
-    return [
-      { type: 'Police Station', count: 3 },
-      { type: 'Hospital', count: 6 },
-      { type: 'School', count: 12 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 4 },
-    ];
-  }
-  if (zLower.includes('likoni')) {
-    return [
-      { type: 'Police Station', count: 2 },
-      { type: 'Hospital', count: 3 },
-      { type: 'School', count: 10 },
-      { type: 'Power Substation', count: 1 },
-      { type: 'Transit Hub', count: 3 },
-    ];
-  }
-  if (zLower.includes('mombasa island') || zLower.includes('old town') || zLower.includes('mvita')) {
-    return [
-      { type: 'Police Station', count: 5 },
-      { type: 'Hospital', count: 8 },
-      { type: 'School', count: 15 },
-      { type: 'Power Substation', count: 3 },
-      { type: 'Transit Hub', count: 7 },
-    ];
-  }
-  if (zLower.includes('pioneer') || zLower.includes('eldoret cbd')) {
-    return [
-      { type: 'Police Station', count: 3 },
-      { type: 'Hospital', count: 5 },
-      { type: 'School', count: 11 },
-      { type: 'Power Substation', count: 2 },
-      { type: 'Transit Hub', count: 5 },
-    ];
-  }
-  if (zLower.includes('langas') || zLower.includes('huruma')) {
-    return [
-      { type: 'Police Station', count: 2 },
-      { type: 'Hospital', count: 3 },
-      { type: 'School', count: 14 },
-      { type: 'Power Substation', count: 1 },
-      { type: 'Transit Hub', count: 4 },
-    ];
-  }
-
   const lookupKey = Object.keys(OFFICIAL_SUBCOUNTY_POPULATION).find(k => 
     zLower.includes(k.toLowerCase()) || k.toLowerCase().includes(zLower)
   ) || zLower;

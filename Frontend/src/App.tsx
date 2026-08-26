@@ -57,12 +57,24 @@ export default function App() {
           fetch('/api/auth/profile/', {
             headers: { Authorization: `Token ${sessionToken}` }
           })
-          .then(res => res.ok ? res.json() : null)
+          .then(res => {
+            if (!res.ok) {
+              // Token is invalid/expired or user was deleted from DB
+              sessionStorage.removeItem("token");
+              sessionStorage.removeItem("user");
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
+              setCurrentUser(null);
+              setIsAuthenticated(false);
+              return null;
+            }
+            return res.json();
+          })
           .then(data => {
             if (data) {
-              const updatedName = (data.first_name || data.last_name) ? `${data.first_name || ''} ${data.last_name || ''}`.trim() : data.name || data.username || user.name;
+              const apiName = data.name || ((data.first_name || data.last_name) ? `${data.first_name || ''} ${data.last_name || ''}`.trim() : data.username);
               const updatedUser: User = {
-                name: updatedName || user.name,
+                name: apiName || user.name,
                 email: data.email || user.email,
                 city: data.profile?.focus_city || user.city,
                 role: data.profile?.agency_role || user.role,

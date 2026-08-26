@@ -45,7 +45,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   const [newPassword, setNewPassword] = useState('');
 
   const isValidEmail = (email: string): boolean => {
-    return /\S+@\S+\.\S+/.test(email.trim());
+    return /\S+@\S+/.test(email.trim());
   };
 
   const isStrictPassword = (pass: string): boolean => {
@@ -104,27 +104,45 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       try { data = await res.json(); } catch (_) {}
 
       if (res.ok && data?.token) {
+        // Clear previous session/local storage state to prevent user contamination
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+
         const registeredProfiles = JSON.parse(localStorage.getItem('registered_user_profiles') || '{}');
         const savedProfile = registeredProfiles[cleanEmail];
-        const apiName = (data.user?.first_name || data.user?.last_name) ? `${data.user?.first_name || ''} ${data.user?.last_name || ''}`.trim() : data.user?.name;
+        
+        // Prioritize actual backend API user details over local fallbacks
+        const apiUser = data.user;
+        const apiName = apiUser?.name || ((apiUser?.first_name || apiUser?.last_name) ? `${apiUser?.first_name || ''} ${apiUser?.last_name || ''}`.trim() : null);
         
         const loggedUser: User = {
-          name: dbRecord?.user?.name || savedProfile?.name || apiName || cleanEmail.split('@')[0],
-          email: data.user?.email || cleanEmail,
-          city: data.user?.profile?.focus_city || dbRecord?.user?.city || savedProfile?.city || 'Nairobi',
-          role: dbRecord?.user?.role || data.user?.profile?.agency_role || savedProfile?.role || 'Urban Planner',
+          name: apiName || savedProfile?.name || dbRecord?.user?.name || cleanEmail.split('@')[0],
+          email: apiUser?.email || cleanEmail,
+          city: apiUser?.profile?.focus_city || savedProfile?.city || dbRecord?.user?.city || 'Nairobi',
+          role: apiUser?.profile?.agency_role || savedProfile?.role || dbRecord?.user?.role || 'Urban Planner',
         };
         
+        // Cache user profile mapped to email
+        registeredProfiles[cleanEmail] = loggedUser;
+        localStorage.setItem('registered_user_profiles', JSON.stringify(registeredProfiles));
+
         if (rememberMe) {
           localStorage.setItem('token', data.token);
           localStorage.setItem('user', JSON.stringify(loggedUser));
         } else {
           sessionStorage.setItem('token', data.token);
           sessionStorage.setItem('user', JSON.stringify(loggedUser));
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
         }
         onAuthenticated(loggedUser, data.token);
+        return;
+      }
+
+      // If backend returned error response (e.g. 401 Unauthorized or 400 Bad Request)
+      if (data && (data.error || data.detail)) {
+        showShortToast(data.error || data.detail, 'error');
+        setLoading(false);
         return;
       }
 
@@ -220,13 +238,41 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       role: suRole,
     };
 
+    let backendErrorMsg = '';
     try {
-      await fetch('/api/auth/register/', {
+      const res = await fetch('/api/auth/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newUser.name, email: cleanEmail, city: 'Nairobi', role: suRole, password: suPass }),
       });
-    } catch (_) {}
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        if (res.status === 400 && data) {
+          if (typeof data === 'string') backendErrorMsg = data;
+          else if (data.error) backendErrorMsg = data.error;
+          else if (data.email) backendErrorMsg = Array.isArray(data.email) ? data.email[0] : data.email;
+          else if (data.password) backendErrorMsg = Array.isArray(data.password) ? data.password[0] : data.password;
+          else if (data.detail) backendErrorMsg = data.detail;
+          else if (typeof data === 'object') {
+            const firstKey = Object.keys(data)[0];
+            if (firstKey) {
+              const val = data[firstKey];
+              backendErrorMsg = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Backend server registration unreachable, registering locally:', err);
+    }
+
+    if (backendErrorMsg) {
+      showShortToast(backendErrorMsg, 'error');
+      setLoading(false);
+      return;
+    }
 
     try {
       dbMap[cleanEmail] = { user: newUser, pass: suPass };
@@ -242,7 +288,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     setSiUser(cleanEmail);
     setSiPass('');
     setView('signin');
-    showShortToast('Account saved successfully!', 'success');
+    showShortToast('Registration successful! Please sign in.', 'success');
   };
 
   // Forgot Password

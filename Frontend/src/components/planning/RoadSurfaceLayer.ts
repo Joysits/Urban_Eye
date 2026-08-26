@@ -8,7 +8,7 @@ export interface RoadSurfaceLayerOptions {
 }
 
 /**
-  Creates and overlays the HDX HeiGIT Kenya Road Surface GeoJSON dataset on a Leaflet map.
+  Creates and overlays the HDX HeiGIT Kenya Road Surface GeoJSON dataset on the Leaflet map.
  */
 export async function addRoadSurfaceLayer({ map, customGeoJsonPath = '/data/heigit_KE_planet_roadsurface_lines.geojson', onLoaded }: RoadSurfaceLayerOptions): Promise<L.GeoJSON> {
   let geoData: any = FALLBACK_HEIGIT_ROAD_GEOJSON;
@@ -49,7 +49,7 @@ export async function addRoadSurfaceLayer({ map, customGeoJsonPath = '/data/heig
     const isPaved = parseIsPaved(props);
     const highway = parseHighway(props);
 
-    // Dynamic Line Weight by Highway Classification )
+    //  Line Weight by Highway Classification 
     let weight = 1.2;
     if (highway.includes('motorway') || highway.includes('trunk') || highway.includes('primary')) {
       weight = 3.0;

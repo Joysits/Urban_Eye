@@ -327,8 +327,10 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
 
     setIsSimulating(true);
     setTimeout(() => {
-      const locName = searchedLocation || selectedSubCounty || `${city} Zone`;
-      const locLower = locName.toLowerCase();
+      const activeSubCounty = selectedSubCounty || searchedLocation || `${city} Sub-County`;
+      const cleanSubName = activeSubCounty.replace(/ Sub-County$/i, '').trim();
+      const locName = selectedSubCounty ? cleanSubName : (searchedLocation || `${city} Zone`);
+      const locLower = cleanSubName.toLowerCase();
       const hash = locName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 
       let landPrice = city === 'Eldoret' ? 'KES 22M – 45M / Acre' : city === 'Mombasa' ? 'KES 45M – 75M / Acre' : 'KES 75M – 120M / Acre';
@@ -343,7 +345,11 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
       };
 
       const cMeta = cityPopData[city] || cityPopData['Nairobi'];
-      const matchedKey = Object.keys(OFFICIAL_SUBCOUNTY_POPULATION).find(k => locLower.includes(k.toLowerCase()) || k.toLowerCase().includes(locLower)) || '';
+      const matchedKey = Object.keys(OFFICIAL_SUBCOUNTY_POPULATION).find(k => 
+        k.toLowerCase() === locLower || 
+        locLower.includes(k.toLowerCase()) || 
+        k.toLowerCase().includes(locLower)
+      ) || '';
       const subInfo = OFFICIAL_SUBCOUNTY_POPULATION[matchedKey] || { pop: (KNBS_COUNTY_TOTALS[city]?.pop || 4000000) / 10, areaKm2: 25, county: city };
 
       const subPop = subInfo.pop;
@@ -1000,19 +1006,12 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
                           <div style={{ width: `${roadStats.unpavedPercentage}%`, background: 'linear-gradient(90deg, #d97706, #b45309)' }} />
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.75rem', marginBottom: 10 }}>
+                        <div style={{ fontSize: '0.75rem', marginBottom: 10 }}>
                           <div style={{ background: '#f8f4f4', padding: '8px 10px', borderRadius: 6, border: '1px solid rgba(124, 29, 36, 0.1)' }}>
                             <span style={{ display: 'block', color: '#7c1d24', fontSize: '0.64rem', textTransform: 'uppercase', fontWeight: 700, fontFamily: 'Outfit, sans-serif' }}>Climate Passability Score</span>
-                            <strong style={{ color: '#7c1d24', fontSize: '0.92rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{roadStats.avgHpi} / 6 Rating</strong>
+                            <strong style={{ color: '#7c1d24', fontSize: '0.92rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{roadStats.avgHpi} / 6 Rating — {roadStats.passabilityRating}</strong>
                             <small style={{ display: 'block', color: '#7a4d52', fontSize: '0.66rem', marginTop: 2, fontFamily: 'Inter, sans-serif' }}>
                               {roadStats.avgHpi <= 2.5 ? 'All-weather access 365 days/yr' : 'Rainy season mud risk on earth feeder roads'}
-                            </small>
-                          </div>
-                          <div style={{ background: '#f8f4f4', padding: '8px 10px', borderRadius: 6, border: '1px solid rgba(124, 29, 36, 0.1)' }}>
-                            <span style={{ display: 'block', color: '#7c1d24', fontSize: '0.64rem', textTransform: 'uppercase', fontWeight: 700, fontFamily: 'Outfit, sans-serif' }}>Transit Accessibility Grade</span>
-                            <strong style={{ color: '#7c1d24', fontSize: '0.78rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{roadStats.passabilityRating}</strong>
-                            <small style={{ display: 'block', color: '#7a4d52', fontSize: '0.66rem', marginTop: 2, fontFamily: 'Inter, sans-serif' }}>
-                              Commercial delivery &amp; emergency vehicle mobility grade
                             </small>
                           </div>
                         </div>
@@ -1026,18 +1025,8 @@ export default function DevPlanningView({ currentUser, currentCity, onCityChange
                   );
                 })()}
 
-                {/* Subtle Transparent Prediction Method Explanation */}
-                <div style={{ paddingTop: 14, borderTop: '1px solid rgba(124, 29, 36, 0.1)', opacity: 0.85 }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', color: '#7a4d52', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 4, fontWeight: 700 }}>
-                    PREDICTION METHOD &amp; ACCURACY
-                  </span>
-                  <p style={{ fontSize: '0.76rem', color: '#7a4d52', margin: 0, lineHeight: 1.35, fontFamily: 'sans-serif' }}>
-                    Predictions are calculated using a Spatial Machine Learning model (Spatial KDE &amp; Non-Linear Scaling, Mean Accuracy: 88.4% / R² = 0.884) trained on official KNBS census data, OpenStreetMap road density metrics, historical incident safety logs, and local land valuation indices in Kenya.
-                  </p>
-                </div>
-
                 {/* AI / ML Accuracy Disclaimer Warning */}
-                <div style={{ marginTop: 10, background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8, padding: '8px 12px', fontSize: '0.72rem', color: '#873800', lineHeight: 1.38, fontFamily: 'Inter, sans-serif' }}>
+                <div style={{ marginTop: 14, background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8, padding: '8px 12px', fontSize: '0.72rem', color: '#873800', lineHeight: 1.38, fontFamily: 'Inter, sans-serif' }}>
                   ⚠️ <strong>Notice on Machine Learning &amp; AI Projections:</strong> Predictive outputs are calculated using spatial Machine Learning algorithms. While model evaluation indicates high empirical accuracy (88.4%), ML projections can occasionally deviate due to unpredictable real-world dynamics. Projections are provided for urban decision support and should be validated alongside site visits and municipal inspections.
                 </div>
 

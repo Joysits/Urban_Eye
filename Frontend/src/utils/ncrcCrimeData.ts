@@ -85,7 +85,7 @@ export const NCRC_CITY_DATA: Record<string, NCRCCityData> = {
 };
 
 /**
- * Calculates empirical baseline Crime Severity Index from NCRC data
+ * Calculation of the baseline Crime Severity Index from NCRC data
  */
 export function calculateCityRiskSeverity(city: string, topCount: number = 6) {
   const normalizedCity = Object.keys(NCRC_CITY_DATA).find(
@@ -118,15 +118,7 @@ export function calculateCityRiskSeverity(city: string, topCount: number = 6) {
   };
 }
 
-/**
- * Spatial ML Risk Severity Model (Kernel Density Estimation & Distance Decay Weighting)
- * 
- * Formula:
- *   Spatial_Risk(s) = Base_NCRC_Score * [ 1 + λ * ∑ ( w_j * exp( -d(s, p_j)^2 / (2 * σ^2) ) ) ]
- * 
- * Evaluates spatial risk dynamically by combining NCRC city empirical baseline 
- * with spatial Kernel Density Estimation (KDE) and distance decay parameters.
- */
+
 export function calculateSpatialMLRiskSeverity(
   city: string,
   lat?: number | null,
