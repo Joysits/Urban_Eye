@@ -68,10 +68,12 @@ class RegisterSerializer(serializers.Serializer):
             last_name=last_name
         )
 
-        UserProfile.objects.create(
+        UserProfile.objects.update_or_create(
             user=user,
-            focus_city=validated_data["city"],
-            agency_role=validated_data["role"]
+            defaults={
+                "focus_city": validated_data["city"],
+                "agency_role": validated_data["role"]
+            }
         )
 
         return user

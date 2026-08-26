@@ -12,6 +12,7 @@ class UserProfile(models.Model):
     ROLE_CHOICES = [
         ("Urban Planner", "Urban Planner"),
         ("Law Enforcement", "Law Enforcement"),
+        ("Crime Analyst", "Crime Analyst"),
         ("Researcher", "Researcher"),
         ("Administrator", "Administrator"),
     ]
