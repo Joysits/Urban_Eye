@@ -69,7 +69,7 @@ def is_port_open(host, port):
     except Exception:
         return False
 
-DATABASE_TYPE = os.getenv("DATABASE_TYPE", "postgis").lower()
+DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite3").lower()
 pg_host = os.getenv("POSTGRES_HOST", "localhost")
 pg_port = os.getenv("POSTGRES_PORT", "5433")
 
