@@ -1,4 +1,9 @@
-from django.contrib.gis.db import models 
+try:
+    from django.contrib.gis.db import models
+except Exception:
+    from django.db import models
+    if not hasattr(models, 'PolygonField'):
+        models.PolygonField = models.TextField
 from django.contrib.auth.models import User
 from django.utils import timezone
 

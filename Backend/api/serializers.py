@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from rest_framework_gis.serializers import GeoFeatureModelSerializer
+try:
+    from rest_framework_gis.serializers import GeoFeatureModelSerializer
+except Exception:
+    GeoFeatureModelSerializer = serializers.ModelSerializer
 from .models import (
     GeneratedReport, Incident, PlanningProject, UserProfile,
     Zone, PopulationData, Infrastructure, ImpactPrediction

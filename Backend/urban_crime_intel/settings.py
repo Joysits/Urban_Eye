@@ -59,6 +59,12 @@ ALLOWED_HOSTS = [
 
 DATABASE_TYPE = os.getenv("DATABASE_TYPE", "postgis").lower()
 
+try:
+    from django.contrib.gis.gdal import HAS_GDAL
+    HAS_GIS = HAS_GDAL
+except Exception:
+    HAS_GIS = False
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -66,12 +72,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.gis",  # Enabled GeoDjango for PostGIS spatial features
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
     "api",
 ]
+
+if HAS_GIS:
+    INSTALLED_APPS.insert(6, "django.contrib.gis")
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",

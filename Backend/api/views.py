@@ -4,8 +4,12 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db.models import Count, Sum, Avg, Q
 from django.db.models.functions import TruncMonth
-from django.contrib.gis.geos import Point
-from django.contrib.gis.measure import D
+try:
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import D
+except Exception:
+    Point = None
+    D = None
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
