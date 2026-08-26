@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models as std_models
 
-class SafePolygonField(std_models.TextField):
+class SafeGISField(std_models.TextField):
     def __init__(self, *args, **kwargs):
         kwargs.pop('srid', None)
         super().__init__(*args, **kwargs)
@@ -13,10 +13,16 @@ try:
         models = gis_models
     else:
         models = std_models
-        models.PolygonField = SafePolygonField
+        models.PointField = SafeGISField
+        models.PolygonField = SafeGISField
+        models.MultiPolygonField = SafeGISField
+        models.GeometryField = SafeGISField
 except Exception:
     models = std_models
-    models.PolygonField = SafePolygonField
+    models.PointField = SafeGISField
+    models.PolygonField = SafeGISField
+    models.MultiPolygonField = SafeGISField
+    models.GeometryField = SafeGISField
 from django.contrib.auth.models import User
 from django.utils import timezone
 
