@@ -1,28 +1,4 @@
-from django.conf import settings
-from django.db import models as std_models
-
-class SafeGISField(std_models.TextField):
-    def __init__(self, *args, **kwargs):
-        kwargs.pop('srid', None)
-        super().__init__(*args, **kwargs)
-
-try:
-    from django.contrib.gis.db import models as gis_models
-    db_engine = getattr(settings, 'DATABASES', {}).get('default', {}).get('ENGINE', '')
-    if 'postgis' in db_engine or 'spatialite' in db_engine:
-        models = gis_models
-    else:
-        models = std_models
-        models.PointField = SafeGISField
-        models.PolygonField = SafeGISField
-        models.MultiPolygonField = SafeGISField
-        models.GeometryField = SafeGISField
-except Exception:
-    models = std_models
-    models.PointField = SafeGISField
-    models.PolygonField = SafeGISField
-    models.MultiPolygonField = SafeGISField
-    models.GeometryField = SafeGISField
+from django.contrib.gis.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
