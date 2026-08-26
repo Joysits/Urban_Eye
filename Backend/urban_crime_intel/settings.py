@@ -57,13 +57,44 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
-DATABASE_TYPE = os.getenv("DATABASE_TYPE", "postgis").lower()
+# -----------------------------------------------------------------------------
+# Database Configuration
+# -----------------------------------------------------------------------------
+import socket
 
-try:
-    from django.contrib.gis.gdal import HAS_GDAL
-    HAS_GIS = HAS_GDAL
-except Exception:
-    HAS_GIS = False
+def is_port_open(host, port):
+    try:
+        with socket.create_connection((host, int(port)), timeout=1):
+            return True
+    except Exception:
+        return False
+
+DATABASE_TYPE = os.getenv("DATABASE_TYPE", "postgis").lower()
+pg_host = os.getenv("POSTGRES_HOST", "localhost")
+pg_port = os.getenv("POSTGRES_PORT", "5433")
+
+if DATABASE_TYPE in {"postgis", "postgres", "postgresql"} and (is_port_open(pg_host, pg_port) or is_port_open(pg_host, 5432)):
+    active_port = pg_port if is_port_open(pg_host, pg_port) else "5432"
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.contrib.gis.db.backends.postgis",
+            "NAME": os.getenv("POSTGRES_DB", "urban_crime_intel"),
+            "USER": os.getenv("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "Joy"),
+            "HOST": pg_host,
+            "PORT": active_port,
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+active_engine = DATABASES["default"]["ENGINE"]
+is_spatial_db = "postgis" in active_engine or "spatialite" in active_engine
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -78,7 +109,7 @@ INSTALLED_APPS = [
     "api",
 ]
 
-if HAS_GIS:
+if is_spatial_db:
     INSTALLED_APPS.insert(6, "django.contrib.gis")
 
 MIDDLEWARE = [
@@ -112,41 +143,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "urban_crime_intel.wsgi.application"
 ASGI_APPLICATION = "urban_crime_intel.asgi.application"
-
-# -----------------------------------------------------------------------------
-# Database Configuration
-# -----------------------------------------------------------------------------
-import socket
-
-def is_port_open(host, port):
-    try:
-        with socket.create_connection((host, int(port)), timeout=1):
-            return True
-    except Exception:
-        return False
-
-pg_host = os.getenv("POSTGRES_HOST", "localhost")
-pg_port = os.getenv("POSTGRES_PORT", "5433")
-
-if DATABASE_TYPE in {"postgis", "postgres", "postgresql"} and (is_port_open(pg_host, pg_port) or is_port_open(pg_host, 5432)):
-    active_port = pg_port if is_port_open(pg_host, pg_port) else "5432"
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.contrib.gis.db.backends.postgis",
-            "NAME": os.getenv("POSTGRES_DB", "urban_crime_intel"),
-            "USER": os.getenv("POSTGRES_USER", "postgres"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "Joy"),
-            "HOST": pg_host,
-            "PORT": active_port,
-        }
-    }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
