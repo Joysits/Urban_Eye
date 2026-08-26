@@ -1,9 +1,17 @@
+from django.conf import settings
+from django.db import models as std_models
+
 try:
-    from django.contrib.gis.db import models
+    from django.contrib.gis.db import models as gis_models
+    db_engine = getattr(settings, 'DATABASES', {}).get('default', {}).get('ENGINE', '')
+    if 'postgis' in db_engine or 'spatialite' in db_engine:
+        models = gis_models
+    else:
+        models = std_models
+        models.PolygonField = std_models.TextField
 except Exception:
-    from django.db import models
-    if not hasattr(models, 'PolygonField'):
-        models.PolygonField = models.TextField
+    models = std_models
+    models.PolygonField = std_models.TextField
 from django.contrib.auth.models import User
 from django.utils import timezone
 
