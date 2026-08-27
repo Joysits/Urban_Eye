@@ -226,12 +226,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
 
     setLoading(true);
     const dbMap = getRegisteredUsersMap();
-    if (dbMap[cleanEmail]) {
-      showShortToast('An account with this email address already exists.', 'error');
-      setLoading(false);
-      return;
-    }
-
     const newUser: User = {
       name: suName.trim() || 'Urban Planner',
       email: cleanEmail,
@@ -239,7 +233,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       role: suRole,
     };
 
-    let backendErrorMsg = '';
     try {
       const res = await fetch(getApiUrl('/api/auth/register/'), {
         method: 'POST',
@@ -249,12 +242,22 @@ export default function AuthScreen({ onAuthenticated }: Props) {
 
       const data = await res.json().catch(() => null);
 
+      if (res.ok && data?.token) {
+        sessionStorage.setItem('token', data.token);
+        localStorage.setItem('token', data.token);
+        showShortToast('Registration successful! Welcome to Urban Eye.', 'success');
+        setLoading(false);
+        onAuthenticated(newUser, data.token);
+        return;
+      }
+
       if (!res.ok) {
-        if (res.status === 400 && data) {
+        let backendErrorMsg = 'Registration failed on server.';
+        if (data) {
           if (typeof data === 'string') backendErrorMsg = data;
           else if (data.error) backendErrorMsg = data.error;
-          else if (data.email) backendErrorMsg = Array.isArray(data.email) ? data.email[0] : data.email;
-          else if (data.password) backendErrorMsg = Array.isArray(data.password) ? data.password[0] : data.password;
+          else if (data.email) backendErrorMsg = Array.isArray(data.email) ? `Email: ${data.email[0]}` : `Email: ${data.email}`;
+          else if (data.password) backendErrorMsg = Array.isArray(data.password) ? `Password: ${data.password[0]}` : `Password: ${data.password}`;
           else if (data.detail) backendErrorMsg = data.detail;
           else if (typeof data === 'object') {
             const firstKey = Object.keys(data)[0];
@@ -264,15 +267,12 @@ export default function AuthScreen({ onAuthenticated }: Props) {
             }
           }
         }
+        showShortToast(backendErrorMsg, 'error');
+        setLoading(false);
+        return;
       }
     } catch (err) {
       console.warn('Backend server registration unreachable, registering locally:', err);
-    }
-
-    if (backendErrorMsg) {
-      showShortToast(backendErrorMsg, 'error');
-      setLoading(false);
-      return;
     }
 
     try {
