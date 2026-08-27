@@ -616,6 +616,35 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 def _send_reset_email_async(subject, message, from_email, recipient_list):
+    api_key = (os.getenv("EMAIL_HOST_PASSWORD", "") or os.getenv("BREVO_API_KEY", "")).strip()
+
+    # Use Brevo HTTPS REST API (Port 443 - 100% allowed on Render Free Tier)
+    if api_key:
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            payload = json.dumps({
+                "sender": {"name": "Urban Eye Support", "email": "sitieneijoy@gmail.com"},
+                "to": [{"email": r} for r in recipient_list],
+                "subject": subject,
+                "textContent": message,
+            }).encode("utf-8")
+            headers = {
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json"
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                res_body = resp.read().decode("utf-8")
+                logger.info(f"📧 [BREVO API SUCCESS] Reset email dispatched to {recipient_list}: {res_body}")
+                print(f"📧 [BREVO API SUCCESS] Email sent to {recipient_list}")
+                return True
+        except Exception as e:
+            logger.error(f"❌ [BREVO API ERROR] Failed to send email to {recipient_list}: {str(e)}")
+            print(f"❌ [BREVO API ERROR] Email dispatch failed: {str(e)}")
+            return False
+
+    # Fallback to standard Django SMTP
     try:
         send_mail(
             subject=subject,
@@ -631,6 +660,7 @@ def _send_reset_email_async(subject, message, from_email, recipient_list):
         logger.error(f"❌ [SMTP ERROR] Failed to send email to {recipient_list}: {str(e)}", exc_info=True)
         print(f"❌ [SMTP ERROR] Email dispatch failed for {recipient_list}: {str(e)}")
         return False
+
 
 class ForgotPasswordTokenView(APIView):
     permission_classes = [AllowAny]
@@ -699,34 +729,46 @@ class TestEmailView(APIView):
 
     def get(self, request):
         recipient = request.query_params.get("email", "sitieneijoy@gmail.com")
-        host = getattr(settings, "EMAIL_HOST", "not set")
-        user = getattr(settings, "EMAIL_HOST_USER", "not set")
-        pwd = getattr(settings, "EMAIL_HOST_PASSWORD", "")
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>")
+        api_key = (os.getenv("EMAIL_HOST_PASSWORD", "") or os.getenv("BREVO_API_KEY", "")).strip()
+
+        if not api_key:
+            return Response({
+                "status": "error",
+                "error": "EMAIL_HOST_PASSWORD is not set in Render Environment Variables."
+            }, status=status.HTTP_200_OK)
 
         try:
-            sent_count = send_mail(
-                subject="Urban Eye - Test Diagnostic Email",
-                message="Hello! This is a test verification email sent from Urban Eye via Brevo SMTP.",
-                from_email=from_email,
-                recipient_list=[recipient],
-                fail_silently=False,
-            )
+            url = "https://api.brevo.com/v3/smtp/email"
+            payload = json.dumps({
+                "sender": {"name": "Urban Eye Support", "email": "sitieneijoy@gmail.com"},
+                "to": [{"email": recipient}],
+                "subject": "Urban Eye - Test Verification Email",
+                "textContent": "Hello! This is a test email sent from Urban Eye via Brevo HTTPS API.",
+            }).encode("utf-8")
+            headers = {
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json"
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                res_body = resp.read().decode("utf-8")
+                return Response({
+                    "status": "success",
+                    "brevo_response": json.loads(res_body),
+                    "message": f"Test email successfully dispatched to {recipient} via Brevo HTTPS API!"
+                }, status=status.HTTP_200_OK)
+        except urllib.error.HTTPError as e:
+            err_text = e.read().decode("utf-8", errors="ignore")
             return Response({
-                "status": "success",
-                "sent_count": sent_count,
-                "email_host": host,
-                "email_user": user,
-                "password_configured": bool(pwd),
-                "message": f"Test email successfully sent to {recipient}!"
+                "status": "brevo_api_error",
+                "http_code": e.code,
+                "brevo_error": err_text
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 "status": "error",
-                "smtp_error": str(e),
-                "email_host": host,
-                "email_user": user,
-                "password_configured": bool(pwd),
+                "exception": str(e)
             }, status=status.HTTP_200_OK)
 
 
