@@ -206,7 +206,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }
   };
 
-  // Forgot Password
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlert(null);
@@ -226,12 +225,8 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
-        if (data.code) {
-          setResetCode(data.code);
-        }
         setView('reset');
-        const codeAlert = data.code ? ` Verification Code: ${data.code}` : ' Please check your email inbox.';
-        showShortToast(`Code dispatched for ${cleanEmail}!${codeAlert}`, 'success');
+        showShortToast(`Verification code sent to ${cleanEmail}. Please check your inbox.`, 'success');
       } else {
         showShortToast(data?.error || 'No account found with this email address.', 'error');
       }
@@ -254,11 +249,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
-        if (data.code) {
-          setResetCode(data.code);
-        }
-        const codeAlert = data.code ? ` Verification Code: ${data.code}` : '';
-        showShortToast(`Resent code to ${cleanEmail}!${codeAlert}`, 'success');
+        showShortToast(`Code resent to ${cleanEmail}. Please check your inbox.`, 'success');
       } else {
         showShortToast(data?.error || 'Unable to resend code.', 'error');
       }

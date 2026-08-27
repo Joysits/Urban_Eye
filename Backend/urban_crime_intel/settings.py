@@ -56,32 +56,49 @@ ALLOWED_HOSTS = ["*"]
 # -----------------------------------------------------------------------------
 # Database Configuration
 # -----------------------------------------------------------------------------
-import socket
+# NOTE: Database selection is PURELY environment-variable based.
+# No TCP port probing — that approach causes silent fallback to SQLite on cloud
+# hosts (Render, Railway, etc.) where connections take > 1 s on cold start.
+#
+# Priority:
+#   1. DATABASE_URL  (Render's native env var — set automatically on Render)
+#   2. DATABASE_TYPE + POSTGRES_* vars  (explicit config)
+#   3. SQLite        (local dev fallback only)
 
-def is_port_open(host, port):
-    try:
-        with socket.create_connection((host, int(port)), timeout=1):
-            return True
-    except Exception:
-        return False
-
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite3").lower()
-pg_host = os.getenv("POSTGRES_HOST", "localhost")
-pg_port = os.getenv("POSTGRES_PORT", "5433")
 
-if DATABASE_TYPE in {"postgis", "postgres", "postgresql"} and (is_port_open(pg_host, pg_port) or is_port_open(pg_host, 5432)):
-    active_port = pg_port if is_port_open(pg_host, pg_port) else "5432"
+if DATABASE_URL:
+    # Render injects DATABASE_URL automatically for linked Postgres services.
+    # Parse it manually to keep the PostGIS engine.
+    import urllib.parse as _urlparse
+    _url = _urlparse.urlparse(DATABASE_URL)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.contrib.gis.db.backends.postgis",
+            "NAME": _url.path.lstrip("/"),
+            "USER": _url.username or "",
+            "PASSWORD": _url.password or "",
+            "HOST": _url.hostname or "localhost",
+            "PORT": str(_url.port or 5432),
+            "CONN_MAX_AGE": 60,
+        }
+    }
+elif DATABASE_TYPE in {"postgis", "postgres", "postgresql"}:
+    # Explicit POSTGRES_* env vars — used when DATABASE_URL is not set.
     DATABASES = {
         "default": {
             "ENGINE": "django.contrib.gis.db.backends.postgis",
             "NAME": os.getenv("POSTGRES_DB", "urban_crime_intel"),
             "USER": os.getenv("POSTGRES_USER", "postgres"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "Joy"),
-            "HOST": pg_host,
-            "PORT": active_port,
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
+            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
+            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
         }
     }
 else:
+    # SQLite — local development only. Never reached on Render.
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
