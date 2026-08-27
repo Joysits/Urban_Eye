@@ -35,7 +35,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   // signup
   const [suName, setSuName] = useState('');
   const [suEmail, setSuEmail] = useState('');
-  const [suRole, setSuRole] = useState('');
+  const [suRole, setSuRole] = useState('Urban Planner');
   const [suPass, setSuPass] = useState('');
   const [suConfirm, setSuConfirm] = useState('');
   const [showSuPass, setShowSuPass] = useState(false);
@@ -493,7 +493,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                       onChange={e => setSuRole(e.target.value)}
                       required
                     >
-                      <option value="" disabled>Choose your role...</option>
                       <option value="Urban Planner">Urban Planner</option>
                       <option value="Law Enforcement">Law Enforcement</option>
                       <option value="Crime Analyst">Crime Analyst</option>
