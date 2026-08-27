@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, AlertMsg } from '../../types';
+import { getApiUrl } from '../../api';
 
 const UrbanEyeLogo = ({ compact = false }: { compact?: boolean }) => (
   <svg width={compact ? '26' : '42'} height={compact ? '26' : '42'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -94,7 +95,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     const dbRecord = dbMap[cleanEmail];
 
     try {
-      const res = await fetch('/api/auth/login/', {
+      const res = await fetch(getApiUrl('/api/auth/login/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanEmail, password: siPass }),
@@ -240,7 +241,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
 
     let backendErrorMsg = '';
     try {
-      const res = await fetch('/api/auth/register/', {
+      const res = await fetch(getApiUrl('/api/auth/register/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newUser.name, email: cleanEmail, city: 'Nairobi', role: suRole, password: suPass }),
