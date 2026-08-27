@@ -242,12 +242,16 @@ export default function AuthScreen({ onAuthenticated }: Props) {
 
       const data = await res.json().catch(() => null);
 
-      if (res.ok && data?.token) {
-        sessionStorage.setItem('token', data.token);
-        localStorage.setItem('token', data.token);
-        showShortToast('Registration successful! Welcome to Urban Eye.', 'success');
+      if (res.ok && data) {
+        setSiUser(cleanEmail);
+        setSiPass('');
+        setSuName('');
+        setSuEmail('');
+        setSuPass('');
+        setSuConfirm('');
+        setView('signin');
+        showShortToast('Registration successful! Please sign in with your credentials.', 'success');
         setLoading(false);
-        onAuthenticated(newUser, data.token);
         return;
       }
 
@@ -297,10 +301,9 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
-        setResetCode(data.code || '');
+        setResetCode('');
         setView('reset');
-        const codeMsg = data.code ? `Verification code: ${data.code}` : 'Code dispatched to email!';
-        showShortToast(`Password reset code sent for ${cleanEmail}! ${codeMsg}`, 'success');
+        showShortToast(`Verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
       } else {
         showShortToast(data?.error || 'No account found with this email address.', 'error');
       }
@@ -322,9 +325,12 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         body: JSON.stringify({ email: cleanEmail }),
       });
       const data = await res.json().catch(() => null);
-      setResetCode(data?.code || '');
-      const codeMsg = data?.code ? `Verification code: ${data.code}` : 'Code dispatched!';
-      showShortToast(`Resent verification code for ${cleanEmail}! ${codeMsg}`, 'success');
+      if (res.ok) {
+        setResetCode('');
+        showShortToast(`Resent verification code to ${cleanEmail}! Please check your email inbox.`, 'success');
+      } else {
+        showShortToast(data?.error || 'Unable to resend code.', 'error');
+      }
     } catch {
       showShortToast('Unable to resend code.', 'error');
     } finally {
