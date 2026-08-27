@@ -616,6 +616,34 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 def _send_reset_email_async(subject, message, from_email, recipient_list):
+    api_key = (getattr(settings, "EMAIL_HOST_PASSWORD", "") or os.getenv("BREVO_API_KEY", "") or "").strip()
+    sender_email = getattr(settings, "SERVER_EMAIL", "sitieneijoy@gmail.com")
+
+    # Try Brevo HTTPS REST API (Port 443 - bypasses all SMTP port blocks)
+    if api_key:
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            payload = json.dumps({
+                "sender": {"name": "Urban Eye Support", "email": sender_email},
+                "to": [{"email": r} for r in recipient_list],
+                "subject": subject,
+                "textContent": message,
+            }).encode("utf-8")
+            headers = {
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json"
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                res_body = resp.read().decode("utf-8")
+                logger.info(f"📧 [BREVO API SUCCESS] Reset email dispatched to {recipient_list}: {res_body}")
+                print(f"📧 [BREVO API SUCCESS] Email sent to {recipient_list}")
+                return True
+        except Exception as e:
+            logger.warning(f"⚠️ [BREVO API FAIL] Falling back to SMTP: {str(e)}")
+
+    # Fallback to standard Django SMTP
     try:
         send_mail(
             subject=subject,
@@ -626,9 +654,11 @@ def _send_reset_email_async(subject, message, from_email, recipient_list):
         )
         logger.info(f"📧 [SMTP SUCCESS] Reset email successfully dispatched to {recipient_list}")
         print(f"📧 [SMTP SUCCESS] Reset code email sent to {recipient_list}")
+        return True
     except Exception as e:
         logger.error(f"❌ [SMTP ERROR] Failed to send email to {recipient_list}: {str(e)}", exc_info=True)
         print(f"❌ [SMTP ERROR] Email dispatch failed for {recipient_list}: {str(e)}")
+        return False
 
 class ForgotPasswordTokenView(APIView):
     permission_classes = [AllowAny]
@@ -702,32 +732,21 @@ class TestEmailView(APIView):
         pwd = getattr(settings, "EMAIL_HOST_PASSWORD", "")
         backend = getattr(settings, "EMAIL_BACKEND", "not set")
 
-        try:
-            sent_count = send_mail(
-                subject="Urban Eye - Test Diagnostic Email",
-                message=f"Hello! This is a test email sent from Urban Eye via {host}.",
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", user),
-                recipient_list=[recipient],
-                fail_silently=False,
-            )
-            return Response({
-                "status": "success",
-                "sent_count": sent_count,
-                "email_backend": backend,
-                "email_host": host,
-                "email_user": user,
-                "password_configured": bool(pwd),
-                "message": f"Test email successfully dispatched to {recipient}"
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                "status": "error",
-                "smtp_error": str(e),
-                "email_backend": backend,
-                "email_host": host,
-                "email_user": user,
-                "password_configured": bool(pwd),
-            }, status=status.HTTP_400_BAD_REQUEST)
+        success = _send_reset_email_async(
+            subject="Urban Eye - Test Diagnostic Email",
+            message=f"Hello! This is a test email sent from Urban Eye via Brevo API.",
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>"),
+            recipient_list=[recipient],
+        )
+
+        return Response({
+            "status": "success" if success else "error",
+            "email_backend": backend,
+            "email_host": host,
+            "email_user": user,
+            "password_configured": bool(pwd),
+            "message": f"Test email dispatch attempt completed for {recipient}"
+        }, status=status.HTTP_200_OK)
 
 
 def health_check(request):
