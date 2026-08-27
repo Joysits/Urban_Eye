@@ -187,8 +187,8 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    DEFAULT_FROM_EMAIL = f"Urban Eye Support <{EMAIL_HOST_USER}>"
-    SERVER_EMAIL = EMAIL_HOST_USER
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>")
+    SERVER_EMAIL = "sitieneijoy@gmail.com"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = "Urban Eye Support <noreply@urbaneye.co.ke>"
