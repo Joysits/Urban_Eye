@@ -51,11 +51,7 @@ if os.name == 'nt':
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,0.0.0.0").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = ["*"]
 
 # -----------------------------------------------------------------------------
 # Database Configuration
