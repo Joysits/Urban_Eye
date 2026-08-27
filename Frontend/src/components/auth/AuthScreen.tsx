@@ -301,9 +301,12 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
-        setResetCode('');
+        if (data.code) {
+          setResetCode(data.code);
+        }
         setView('reset');
-        showShortToast(`Verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
+        const codeAlert = data.code ? ` Verification Code: ${data.code}` : ' Please check your email inbox.';
+        showShortToast(`Code dispatched for ${cleanEmail}!${codeAlert}`, 'success');
       } else {
         showShortToast(data?.error || 'No account found with this email address.', 'error');
       }
@@ -325,9 +328,12 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         body: JSON.stringify({ email: cleanEmail }),
       });
       const data = await res.json().catch(() => null);
-      if (res.ok) {
-        setResetCode('');
-        showShortToast(`Resent verification code to ${cleanEmail}! Please check your email inbox.`, 'success');
+      if (res.ok && data) {
+        if (data.code) {
+          setResetCode(data.code);
+        }
+        const codeAlert = data.code ? ` Verification Code: ${data.code}` : '';
+        showShortToast(`Resent code to ${cleanEmail}!${codeAlert}`, 'success');
       } else {
         showShortToast(data?.error || 'Unable to resend code.', 'error');
       }
