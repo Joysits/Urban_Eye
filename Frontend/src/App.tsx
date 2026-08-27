@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import AuthScreen from "./components/auth/AuthScreen";
 import Dashboard from "./components/dashboard/Dashboard";
 import type { User } from "./types";
+import { getApiUrl } from "./api";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -54,7 +55,7 @@ export default function App() {
 
         // Fetch latest profile from backend if session token exists
         if (sessionToken && sessionToken !== 'local_db_token') {
-          fetch('/api/auth/profile/', {
+          fetch(getApiUrl('/api/auth/profile/'), {
             headers: { Authorization: `Token ${sessionToken}` }
           })
           .then(res => {
@@ -101,7 +102,7 @@ export default function App() {
     const token = sessionStorage.getItem("token") || localStorage.getItem("token");
     if (token && token !== 'local_db_token') {
       try {
-        await fetch("/api/auth/logout/", {
+        await fetch(getApiUrl("/api/auth/logout/"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
         });
