@@ -251,45 +251,30 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         return;
       }
 
-      if (!res.ok) {
-        let backendErrorMsg = 'Registration failed on server.';
-        if (data) {
-          if (typeof data === 'string') backendErrorMsg = data;
-          else if (data.error) backendErrorMsg = data.error;
-          else if (data.email) backendErrorMsg = Array.isArray(data.email) ? `Email: ${data.email[0]}` : `Email: ${data.email}`;
-          else if (data.password) backendErrorMsg = Array.isArray(data.password) ? `Password: ${data.password[0]}` : `Password: ${data.password}`;
-          else if (data.detail) backendErrorMsg = data.detail;
-          else if (typeof data === 'object') {
-            const firstKey = Object.keys(data)[0];
-            if (firstKey) {
-              const val = data[firstKey];
-              backendErrorMsg = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
-            }
+      let backendErrorMsg = 'Registration failed on server.';
+      if (data) {
+        if (typeof data === 'string') backendErrorMsg = data;
+        else if (data.error) backendErrorMsg = data.error;
+        else if (data.email) backendErrorMsg = Array.isArray(data.email) ? `Email: ${data.email[0]}` : `Email: ${data.email}`;
+        else if (data.password) backendErrorMsg = Array.isArray(data.password) ? `Password: ${data.password[0]}` : `Password: ${data.password}`;
+        else if (data.detail) backendErrorMsg = data.detail;
+        else if (typeof data === 'object') {
+          const firstKey = Object.keys(data)[0];
+          if (firstKey) {
+            const val = data[firstKey];
+            backendErrorMsg = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
           }
         }
-        showShortToast(backendErrorMsg, 'error');
-        setLoading(false);
-        return;
       }
+      showShortToast(backendErrorMsg, 'error');
+      setLoading(false);
+      return;
     } catch (err) {
-      console.warn('Backend server registration unreachable, registering locally:', err);
+      console.error('Registration server connection error:', err);
+      showShortToast('Unable to connect to live backend server.', 'error');
+      setLoading(false);
+      return;
     }
-
-    try {
-      dbMap[cleanEmail] = { user: newUser, pass: suPass };
-      localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
-      const registeredProfiles = JSON.parse(localStorage.getItem('registered_user_profiles') || '{}');
-      registeredProfiles[cleanEmail] = newUser;
-      localStorage.setItem('registered_user_profiles', JSON.stringify(registeredProfiles));
-    } catch (e) {
-      console.error(e);
-    }
-
-    setLoading(false);
-    setSiUser(cleanEmail);
-    setSiPass('');
-    setView('signin');
-    showShortToast('Registration successful! Please sign in.', 'success');
   };
 
   // Forgot Password
