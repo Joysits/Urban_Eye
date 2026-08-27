@@ -50,7 +50,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   };
 
   const isStrictPassword = (pass: string): boolean => {
-    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(pass);
+    return pass.length >= 8;
   };
 
   const showShortToast = (message: string, type: 'success' | 'error') => {
@@ -513,7 +513,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                     </button>
                   </div>
                   <small style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2, display: 'block' }}>
-                    Min 8 chars: uppercase (A-Z), lowercase (a-z), number (0-9), &amp; special char.
+                    Minimum 8 characters.
                   </small>
                 </div>
 
