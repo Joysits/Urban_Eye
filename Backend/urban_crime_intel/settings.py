@@ -163,16 +163,19 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
-
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
-    if origin.strip() and (origin.strip().startswith("http://") or origin.strip().startswith("https://"))
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
-
-if not CORS_ALLOWED_ORIGINS or os.getenv("CORS_ALLOW_ALL_ORIGINS", "true").lower() in {"true", "1"}:
-    CORS_ALLOW_ALL_ORIGINS = True
 
 # Email Configuration
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
