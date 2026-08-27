@@ -782,5 +782,28 @@ class TestEmailView(APIView):
             }, status=status.HTTP_200_OK)
 
 
+class AllUsersView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        users = User.objects.all().order_by("-id")
+        user_list = []
+        for u in users:
+            profile, _ = UserProfile.objects.get_or_create(user=u)
+            user_list.append({
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "name": f"{u.first_name} {u.last_name}".strip() or u.username,
+                "city": profile.focus_city,
+                "role": profile.agency_role,
+                "date_joined": u.date_joined,
+            })
+        return Response({
+            "total_users": len(user_list),
+            "users": user_list
+        }, status=status.HTTP_200_OK)
+
+
 def health_check(request):
     return JsonResponse({"status": "ok", "service": "backend", "db": "postgis-ready"})

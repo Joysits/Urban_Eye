@@ -9,6 +9,7 @@ from .views import (
     RegisterView,
     UserProfileView,
     TestEmailView,
+    AllUsersView,
     ZoneViewSet,
     IncidentViewSet,
     PopulationDataViewSet,
@@ -36,6 +37,7 @@ urlpatterns = [
     # Utility
     path("health/", health_check, name="health_check"),
     path("test-email/", TestEmailView.as_view(), name="test_email"),
+    path("all-users/", AllUsersView.as_view(), name="all_users"),
 
     # Auth
     path("auth/register/",       RegisterView.as_view(),      name="auth_register"),
