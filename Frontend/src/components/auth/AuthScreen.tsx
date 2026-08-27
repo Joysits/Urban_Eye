@@ -91,8 +91,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }
 
     setLoading(true);
-    const dbMap = getRegisteredUsersMap();
-    const dbRecord = dbMap[cleanEmail];
 
     try {
       const res = await fetch(getApiUrl('/api/auth/login/'), {
@@ -105,29 +103,20 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       try { data = await res.json(); } catch (_) {}
 
       if (res.ok && data?.token) {
-        // Clear previous session/local storage state to prevent user contamination
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
 
-        const registeredProfiles = JSON.parse(localStorage.getItem('registered_user_profiles') || '{}');
-        const savedProfile = registeredProfiles[cleanEmail];
-        
-        // Prioritize actual backend API user details over local fallbacks
         const apiUser = data.user;
         const apiName = apiUser?.name || ((apiUser?.first_name || apiUser?.last_name) ? `${apiUser?.first_name || ''} ${apiUser?.last_name || ''}`.trim() : null);
-        
+
         const loggedUser: User = {
-          name: apiName || savedProfile?.name || dbRecord?.user?.name || cleanEmail.split('@')[0],
+          name: apiName || cleanEmail.split('@')[0],
           email: apiUser?.email || cleanEmail,
-          city: apiUser?.profile?.focus_city || savedProfile?.city || dbRecord?.user?.city || 'Nairobi',
-          role: apiUser?.profile?.agency_role || savedProfile?.role || dbRecord?.user?.role || 'Urban Planner',
+          city: apiUser?.profile?.focus_city || 'Nairobi',
+          role: apiUser?.profile?.agency_role || 'Urban Planner',
         };
-        
-        // Cache user profile mapped to email
-        registeredProfiles[cleanEmail] = loggedUser;
-        localStorage.setItem('registered_user_profiles', JSON.stringify(registeredProfiles));
 
         if (rememberMe) {
           localStorage.setItem('token', data.token);
@@ -140,60 +129,9 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         return;
       }
 
-      // If backend returned error response (e.g. 401 Unauthorized or 400 Bad Request)
-      if (data && (data.error || data.detail)) {
-        showShortToast(data.error || data.detail, 'error');
-        setLoading(false);
-        return;
-      }
-
-      if (!dbRecord) {
-        showShortToast('No account found for this email. Please sign up first.', 'error');
-        setLoading(false);
-        return;
-      }
-
-      if (dbRecord.pass !== siPass) {
-        showShortToast('Incorrect password. Please verify your password.', 'error');
-        setLoading(false);
-        return;
-      }
-
-      const loggedUser = dbRecord.user;
-      if (rememberMe) {
-        localStorage.setItem('token', 'local_db_token');
-        localStorage.setItem('user', JSON.stringify(loggedUser));
-      } else {
-        sessionStorage.setItem('token', 'local_db_token');
-        sessionStorage.setItem('user', JSON.stringify(loggedUser));
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-      onAuthenticated(loggedUser, 'local_db_token');
+      showShortToast(data?.error || data?.detail || data?.non_field_errors?.[0] || 'Invalid email or password.', 'error');
     } catch {
-      if (!dbRecord) {
-        showShortToast('No account found for this email. Please sign up first.', 'error');
-        setLoading(false);
-        return;
-      }
-
-      if (dbRecord.pass !== siPass) {
-        showShortToast('Incorrect password. Please verify your password.', 'error');
-        setLoading(false);
-        return;
-      }
-
-      const loggedUser = dbRecord.user;
-      if (rememberMe) {
-        localStorage.setItem('token', 'local_db_token');
-        localStorage.setItem('user', JSON.stringify(loggedUser));
-      } else {
-        sessionStorage.setItem('token', 'local_db_token');
-        sessionStorage.setItem('user', JSON.stringify(loggedUser));
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-      onAuthenticated(loggedUser, 'local_db_token');
+      showShortToast('Unable to connect to live authentication service.', 'error');
     } finally {
       setLoading(false);
     }
@@ -215,7 +153,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }
 
     if (!isStrictPassword(suPass)) {
-      showShortToast('Password format: min 8 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      showShortToast('Password format: minimum 8 characters.', 'error');
       return;
     }
 
@@ -225,7 +163,6 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }
 
     setLoading(true);
-    const dbMap = getRegisteredUsersMap();
     const newUser: User = {
       name: suName.trim() || 'Urban Planner',
       email: cleanEmail,
@@ -250,7 +187,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         setSuPass('');
         setSuConfirm('');
         setView('signin');
-        showShortToast('Registration successful! Please sign in with your credentials.', 'success');
+        showShortToast('Registration successful! Saved to live database. Please sign in.', 'success');
         setLoading(false);
         return;
       }
@@ -262,22 +199,12 @@ export default function AuthScreen({ onAuthenticated }: Props) {
         else if (data.email) backendErrorMsg = Array.isArray(data.email) ? `Email: ${data.email[0]}` : `Email: ${data.email}`;
         else if (data.password) backendErrorMsg = Array.isArray(data.password) ? `Password: ${data.password[0]}` : `Password: ${data.password}`;
         else if (data.detail) backendErrorMsg = data.detail;
-        else if (typeof data === 'object') {
-          const firstKey = Object.keys(data)[0];
-          if (firstKey) {
-            const val = data[firstKey];
-            backendErrorMsg = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
-          }
-        }
       }
       showShortToast(backendErrorMsg, 'error');
+    } catch {
+      showShortToast('Unable to connect to live database service.', 'error');
+    } finally {
       setLoading(false);
-      return;
-    } catch (err) {
-      console.error('Registration server connection error:', err);
-      showShortToast('Unable to connect to live backend server.', 'error');
-      setLoading(false);
-      return;
     }
   };
 
