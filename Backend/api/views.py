@@ -625,6 +625,36 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 def _send_reset_email_async(subject, message, from_email, recipient_list):
+    api_key = (os.getenv("BREVO_API_KEY", "") or os.getenv("EMAIL_HOST_PASSWORD", "")).strip()
+    sender_email = os.getenv("DEFAULT_FROM_EMAIL", "sitieneijoy@gmail.com")
+    if "<" in sender_email and ">" in sender_email:
+        sender_email = sender_email.split("<")[1].split(">")[0].strip()
+
+    # 1. Try Brevo HTTPS REST API (Port 443 - 100% reliable on cloud hosts)
+    if api_key and ("xkeysib-" in api_key or "brevo" in api_key.lower() or len(api_key) > 20):
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            payload = json.dumps({
+                "sender": {"name": "Urban Eye Support", "email": sender_email},
+                "to": [{"email": r} for r in recipient_list],
+                "subject": subject,
+                "textContent": message,
+            }).encode("utf-8")
+            headers = {
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json"
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                res_body = resp.read().decode("utf-8")
+                logger.info(f"📧 [BREVO API SUCCESS] Reset email dispatched to {recipient_list}: {res_body}")
+                print(f"📧 [BREVO API SUCCESS] Email sent to {recipient_list}")
+                return True
+        except Exception as e:
+            logger.warning(f"⚠️ [BREVO API FAIL] Falling back to SMTP: {str(e)}")
+
+    # 2. Fallback to standard Django SMTP
     try:
         send_mail(
             subject=subject,
