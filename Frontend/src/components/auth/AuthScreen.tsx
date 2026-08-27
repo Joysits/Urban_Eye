@@ -278,7 +278,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
   };
 
   // Forgot Password
-  const handleForgotSend = async (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlert(null);
 
@@ -290,29 +290,22 @@ export default function AuthScreen({ onAuthenticated }: Props) {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/forgot-password/', {
+      const res = await fetch(getApiUrl('/api/auth/forgot-password/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setResetCode('');
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        setResetCode(data.code || '');
         setView('reset');
-        showShortToast(`4-digit reset verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
+        const codeMsg = data.code ? `Verification code: ${data.code}` : 'Code dispatched to email!';
+        showShortToast(`Password reset code sent for ${cleanEmail}! ${codeMsg}`, 'success');
       } else {
-        showShortToast(data.error || 'No account found with this email address.', 'error');
+        showShortToast(data?.error || 'No account found with this email address.', 'error');
       }
     } catch {
-      const dbMap = getRegisteredUsersMap();
-      if (!dbMap[cleanEmail]) {
-        showShortToast('No registered account found with this email address.', 'error');
-        setLoading(false);
-        return;
-      }
-      setResetCode('');
-      setView('reset');
-      showShortToast(`4-digit reset verification code sent to ${cleanEmail}! Please check your email inbox.`, 'success');
+      showShortToast('Unable to connect to password reset service.', 'error');
     } finally {
       setLoading(false);
     }
@@ -323,16 +316,17 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     setLoading(true);
     const cleanEmail = fEmail.trim().toLowerCase();
     try {
-      await fetch('/api/auth/forgot-password/', {
+      const res = await fetch(getApiUrl('/api/auth/forgot-password/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-      setResetCode('');
-      showShortToast(`Resent new 4-digit code to ${cleanEmail}! Please check your email inbox.`, 'success');
+      const data = await res.json().catch(() => null);
+      setResetCode(data?.code || '');
+      const codeMsg = data?.code ? `Verification code: ${data.code}` : 'Code dispatched!';
+      showShortToast(`Resent verification code for ${cleanEmail}! ${codeMsg}`, 'success');
     } catch {
-      setResetCode('');
-      showShortToast(`Resent new 4-digit code to ${cleanEmail}! Please check your email inbox.`, 'success');
+      showShortToast('Unable to resend code.', 'error');
     } finally {
       setLoading(false);
     }
@@ -344,35 +338,28 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     setAlert(null);
 
     if (!isStrictPassword(newPassword)) {
-      showShortToast('Password format: min 8 chars, uppercase (A-Z), lowercase (a-z), number (0-9), & special char.', 'error');
+      showShortToast('Password must be at least 8 characters long.', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/reset-password/', {
+      const res = await fetch(getApiUrl('/api/auth/reset-password/'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: resetCode.trim(), new_password: newPassword }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        // Also update local DB map if account exists locally
-        const dbMap = getRegisteredUsersMap();
-        const cleanEmail = fEmail.trim().toLowerCase();
-        if (dbMap[cleanEmail]) {
-          dbMap[cleanEmail].pass = newPassword;
-          localStorage.setItem('registered_user_db_map', JSON.stringify(dbMap));
-        }
-        setResetCode('');
-        setNewPassword('');
+        showShortToast('Password reset successfully! Please sign in with your new password.', 'success');
+        setSiUser(fEmail.trim().toLowerCase());
+        setSiPass(newPassword);
         setView('signin');
-        showShortToast(' Password reset successful! Please sign in with your new password.', 'success');
       } else {
-        showShortToast(data.error || 'Invalid 4-digit verification code. Please enter the exact code sent to your email.', 'error');
+        showShortToast(data?.error || 'Invalid or expired verification code.', 'error');
       }
     } catch {
-      showShortToast('Unable to verify reset code with backend server. Please check your network connection.', 'error');
+      showShortToast('Unable to reset password on server.', 'error');
     } finally {
       setLoading(false);
     }
@@ -554,7 +541,7 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                 Enter your registered email address to receive a 4-digit verification code.
               </p>
 
-              <form className="auth-form" onSubmit={handleForgotSend} autoComplete="off">
+              <form className="auth-form" onSubmit={handleForgotPasswordSubmit} autoComplete="off">
                 <div className="input-group">
                   <label htmlFor="f-email">Account Email Address</label>
                   <div className="input-wrapper">
