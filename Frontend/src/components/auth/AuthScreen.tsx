@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, AlertMsg } from '../../types';
 import { getApiUrl } from '../../api';
 
@@ -60,20 +60,11 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     }, 5000);
   };
 
-  const getRegisteredUsersMap = (): Record<string, { user: User; pass: string }> => {
-    try {
-      const stored = localStorage.getItem('registered_user_db_map');
-      return stored ? JSON.parse(stored) : {
-        'admin@gmail.com': { user: { name: 'Admin', email: 'admin@gmail.com', city: 'Nairobi', role: 'Administrator' }, pass: 'AdminPassword123' },
-        'planner@agency.go.ke': { user: { name: 'Joy Nduta', email: 'planner@agency.go.ke', city: 'Nairobi', role: 'Urban Planner' }, pass: 'Joy@2026' },
-      };
-    } catch {
-      return {
-        'admin@gmail.com': { user: { name: 'Admin', email: 'admin@gmail.com', city: 'Nairobi', role: 'Administrator' }, pass: 'AdminPassword123' },
-        'planner@agency.go.ke': { user: { name: 'Joy Nduta', email: 'planner@agency.go.ke', city: 'Nairobi', role: 'Urban Planner' }, pass: 'Joy@2026' },
-      };
-    }
-  };
+  // Clear legacy mock localStorage cache on mount
+  useEffect(() => {
+    localStorage.removeItem('registered_user_db_map');
+    localStorage.removeItem('registered_users_map');
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

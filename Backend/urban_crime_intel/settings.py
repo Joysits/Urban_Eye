@@ -165,6 +165,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://urban-eye-app.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
