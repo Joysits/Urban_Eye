@@ -731,21 +731,60 @@ class TestEmailView(APIView):
         user = getattr(settings, "EMAIL_HOST_USER", "not set")
         pwd = getattr(settings, "EMAIL_HOST_PASSWORD", "")
         backend = getattr(settings, "EMAIL_BACKEND", "not set")
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>")
 
-        success = _send_reset_email_async(
-            subject="Urban Eye - Test Diagnostic Email",
-            message=f"Hello! This is a test email sent from Urban Eye via Brevo API.",
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>"),
-            recipient_list=[recipient],
-        )
+        diag_log = []
+
+        # 1. Test Brevo HTTP REST API (Port 443)
+        brevo_res = None
+        if pwd:
+            try:
+                url = "https://api.brevo.com/v3/smtp/email"
+                payload = json.dumps({
+                    "sender": {"name": "Urban Eye Support", "email": "sitieneijoy@gmail.com"},
+                    "to": [{"email": recipient}],
+                    "subject": "Urban Eye - Test Diagnostic Email",
+                    "textContent": "Hello! This is a test email sent from Urban Eye via Brevo API.",
+                }).encode("utf-8")
+                headers = {
+                    "accept": "application/json",
+                    "api-key": pwd.strip(),
+                    "content-type": "application/json"
+                }
+                req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    brevo_res = resp.read().decode("utf-8")
+                    diag_log.append(f"Brevo API Success: {brevo_res}")
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="ignore")
+                diag_log.append(f"Brevo API HTTP Error {e.code}: {err_body}")
+            except Exception as e:
+                diag_log.append(f"Brevo API Exception: {str(e)}")
+
+        # 2. Test Django SMTP send_mail
+        smtp_res = None
+        try:
+            sent_count = send_mail(
+                subject="Urban Eye - Test Diagnostic Email",
+                message="Hello! This is a test email sent from Urban Eye via Django SMTP.",
+                from_email=from_email,
+                recipient_list=[recipient],
+                fail_silently=False,
+            )
+            smtp_res = f"SMTP Success! Sent count: {sent_count}"
+            diag_log.append(smtp_res)
+        except Exception as e:
+            diag_log.append(f"Django SMTP Error: {str(e)}")
 
         return Response({
-            "status": "success" if success else "error",
+            "status": "diagnostic_complete",
             "email_backend": backend,
             "email_host": host,
             "email_user": user,
             "password_configured": bool(pwd),
-            "message": f"Test email dispatch attempt completed for {recipient}"
+            "password_length": len(pwd),
+            "from_email": from_email,
+            "diagnostics": diag_log
         }, status=status.HTTP_200_OK)
 
 
