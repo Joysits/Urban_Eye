@@ -692,5 +692,43 @@ class ResetPasswordTokenView(APIView):
         return Response({"message": "Password reset successful! Please sign in with your new password."}, status=status.HTTP_200_OK)
 
 
+class TestEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        recipient = request.query_params.get("email", "sitieneijoy@gmail.com")
+        host = getattr(settings, "EMAIL_HOST", "not set")
+        user = getattr(settings, "EMAIL_HOST_USER", "not set")
+        pwd = getattr(settings, "EMAIL_HOST_PASSWORD", "")
+        backend = getattr(settings, "EMAIL_BACKEND", "not set")
+
+        try:
+            sent_count = send_mail(
+                subject="Urban Eye - Test Diagnostic Email",
+                message=f"Hello! This is a test email sent from Urban Eye via {host}.",
+                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", user),
+                recipient_list=[recipient],
+                fail_silently=False,
+            )
+            return Response({
+                "status": "success",
+                "sent_count": sent_count,
+                "email_backend": backend,
+                "email_host": host,
+                "email_user": user,
+                "password_configured": bool(pwd),
+                "message": f"Test email successfully dispatched to {recipient}"
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "smtp_error": str(e),
+                "email_backend": backend,
+                "email_host": host,
+                "email_user": user,
+                "password_configured": bool(pwd),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
 def health_check(request):
     return JsonResponse({"status": "ok", "service": "backend", "db": "postgis-ready"})

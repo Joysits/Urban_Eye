@@ -8,6 +8,7 @@ from .views import (
     ResetPasswordTokenView,
     RegisterView,
     UserProfileView,
+    TestEmailView,
     ZoneViewSet,
     IncidentViewSet,
     PopulationDataViewSet,
