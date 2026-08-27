@@ -196,7 +196,14 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       if (data) {
         if (typeof data === 'string') backendErrorMsg = data;
         else if (data.error) backendErrorMsg = data.error;
-        else if (data.email) backendErrorMsg = Array.isArray(data.email) ? `Email: ${data.email[0]}` : `Email: ${data.email}`;
+        else if (data.email) {
+          const emailErr = Array.isArray(data.email) ? data.email[0] : data.email;
+          if (typeof emailErr === 'string' && emailErr.toLowerCase().includes('already exists')) {
+            backendErrorMsg = 'This email address is already registered. Please sign in or use a different email.';
+          } else {
+            backendErrorMsg = `Email: ${emailErr}`;
+          }
+        }
         else if (data.password) backendErrorMsg = Array.isArray(data.password) ? `Password: ${data.password[0]}` : `Password: ${data.password}`;
         else if (data.detail) backendErrorMsg = data.detail;
       }
