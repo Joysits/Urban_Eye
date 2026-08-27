@@ -35,6 +35,7 @@ router.register(r'reports', GeneratedReportViewSet, basename='report')
 urlpatterns = [
     # Utility
     path("health/", health_check, name="health_check"),
+    path("test-email/", TestEmailView.as_view(), name="test_email"),
 
     # Auth
     path("auth/register/",       RegisterView.as_view(),      name="auth_register"),
