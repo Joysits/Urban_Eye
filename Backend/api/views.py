@@ -625,62 +625,54 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-def _send_reset_email_async(subject, message, from_email, recipient_list):
+def _send_reset_email_sync(recipient_email, subject, message):
+    """
+    Attempt to send via Brevo REST API.
+    Returns (success: bool, detail: str)
+    """
     api_key = (os.getenv("BREVO_API_KEY", "") or os.getenv("EMAIL_HOST_PASSWORD", "")).strip()
     sender_email = os.getenv("DEFAULT_FROM_EMAIL", "sitieneijoy@gmail.com")
+    # Strip display name if present: "Urban Eye Support <addr@x.com>" -> "addr@x.com"
     if "<" in sender_email and ">" in sender_email:
         sender_email = sender_email.split("<")[1].split(">")[0].strip()
 
-    # 1. Try Brevo HTTPS REST API (Port 443 - 100% reliable on cloud hosts)
-    if api_key:
-        try:
-            url = "https://api.brevo.com/v3/smtp/email"
-            payload = json.dumps({
-                "sender": {"name": "Urban Eye Support", "email": sender_email},
-                "to": [{"email": r} for r in recipient_list],
-                "subject": subject,
-                "textContent": message,
-            }).encode("utf-8")
-            headers = {
-                "accept": "application/json",
-                "api-key": api_key,
-                "content-type": "application/json"
-            }
-            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                res_body = resp.read().decode("utf-8")
-                logger.info(f"📧 [BREVO API SUCCESS] Reset email dispatched to {recipient_list}: {res_body}")
-                print(f"📧 [BREVO API SUCCESS] Email sent to {recipient_list}")
-                return True
-        except urllib.error.HTTPError as e:
-            err_text = e.read().decode("utf-8", errors="ignore")
-            logger.error(f"❌ [BREVO API HTTP ERROR] {e.code} - {err_text}")
-            print(f"❌ [BREVO API HTTP ERROR] {e.code} - {err_text}")
-        except Exception as e:
-            logger.error(f"⚠️ [BREVO API FAIL] {str(e)} — falling back to SMTP")
-            print(f"⚠️ [BREVO API FAIL] {str(e)}")
-    else:
-        logger.error("❌ [EMAIL CONFIG] BREVO_API_KEY is not set in environment variables. "
-                     "Set it in the Render dashboard under Environment tab.")
-        print("❌ [EMAIL CONFIG] BREVO_API_KEY env var is missing!")
+    if not api_key:
+        msg = ("BREVO_API_KEY is not set in environment variables. "
+               "Add it in your Render dashboard under Environment tab.")
+        logger.error(f"❌ [EMAIL CONFIG] {msg}")
+        return False, msg
 
-    # 2. Fallback to standard Django SMTP
     try:
-        from django.core.mail import send_mail as _send_mail
-        _send_mail(
-            subject=subject,
-            message=message,
-            from_email=from_email,
-            recipient_list=recipient_list,
-            fail_silently=False,
-        )
-        logger.info(f"📧 [SMTP SUCCESS] Reset email successfully dispatched to {recipient_list}")
-        print(f"📧 [SMTP SUCCESS] Reset code email sent to {recipient_list}")
-        return True
+        url = "https://api.brevo.com/v3/smtp/email"
+        payload = json.dumps({
+            "sender": {"name": "Urban Eye Support", "email": sender_email},
+            "to": [{"email": recipient_email}],
+            "subject": subject,
+            "textContent": message,
+        }).encode("utf-8")
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+        }
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            res_body = resp.read().decode("utf-8")
+            logger.info(f"📧 [BREVO SUCCESS] Email sent to {recipient_email}: {res_body}")
+            return True, "Email sent successfully via Brevo."
+    except urllib.error.HTTPError as e:
+        err_text = e.read().decode("utf-8", errors="ignore")
+        detail = f"Brevo HTTP {e.code}: {err_text}"
+        logger.error(f"❌ [BREVO HTTP ERROR] {detail}")
+        return False, detail
+    except urllib.error.URLError as e:
+        detail = f"Brevo network error: {str(e.reason)}"
+        logger.error(f"❌ [BREVO URL ERROR] {detail}")
+        return False, detail
     except Exception as e:
-        logger.error(f"❌ [SMTP ERROR] Failed to send email to {recipient_list}: {str(e)}", exc_info=True)
-        print(f"❌ [SMTP ERROR] Email dispatch failed for {recipient_list}: {str(e)}")
-        return False
+        detail = f"Unexpected error: {str(e)}"
+        logger.error(f"❌ [BREVO UNKNOWN] {detail}", exc_info=True)
+        return False, detail
 
 
 class ForgotPasswordTokenView(APIView):
@@ -695,34 +687,44 @@ class ForgotPasswordTokenView(APIView):
         if not user:
             return Response({"error": "No account found with this email address."}, status=status.HTTP_404_NOT_FOUND)
 
+        # Generate code and store BEFORE sending email
         code = str(secrets.randbelow(9000) + 1000)
         expires = timezone.now() + timedelta(hours=1)
 
-        # Purge any expired tokens to prevent memory growth
+        # Purge expired tokens
         expired_keys = [k for k, v in RESET_TOKENS.items() if v["expires"] < timezone.now()]
         for k in expired_keys:
             del RESET_TOKENS[k]
 
         RESET_TOKENS[code] = {"email": email, "expires": expires}
+        print(f"🔑 [RESET TOKEN] Code for {email}: {code}")
 
         subject = "Urban Eye - Password Reset Verification Code"
-        message = f"Hello,\n\nYour Urban Eye password reset verification code is: {code}\n\nThis code will expire in 60 minutes.\n\nIf you did not request this, please ignore this email."
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Urban Eye Support <sitieneijoy@gmail.com>")
-
-        # Dispatch via asynchronous background thread to prevent HTTP request blocking
-        email_thread = threading.Thread(
-            target=_send_reset_email_async,
-            args=(subject, message, from_email, [email])
+        message = (
+            f"Hello,\n\n"
+            f"Your Urban Eye password reset verification code is:\n\n"
+            f"    {code}\n\n"
+            f"This code expires in 60 minutes.\n"
+            f"If you did not request this, please ignore this email.\n\n"
+            f"\u2014 The Urban Eye Team"
         )
-        email_thread.daemon = True
-        email_thread.start()
 
-        print(f"🔑 [RESET TOKEN DISPATCHED] Code for {email} -> {code}")
+        # Send synchronously so we can report success/failure in the HTTP response
+        email_sent, send_detail = _send_reset_email_sync(email, subject, message)
 
-        return Response({
-            "message": f"A password reset verification code has been sent to {email}. Please check your inbox.",
-            "expires_in_seconds": 3600
-        }, status=status.HTTP_200_OK)
+        if email_sent:
+            return Response({
+                "message": f"A password reset verification code has been sent to {email}. Please check your inbox (and spam folder).",
+                "expires_in_seconds": 3600,
+            }, status=status.HTTP_200_OK)
+        else:
+            # Email failed — the token is still saved so the user CAN use the code
+            # if they can obtain it from Render logs, but we surface the real error.
+            return Response({
+                "error": "Your reset code was generated but the email could not be delivered.",
+                "detail": send_detail,
+                "action": "Check that BREVO_API_KEY is set in your Render environment variables and that the sender email is verified in Brevo.",
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
 class ResetPasswordTokenView(APIView):

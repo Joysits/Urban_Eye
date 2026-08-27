@@ -227,6 +227,10 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       if (res.ok && data) {
         setView('reset');
         showShortToast(`Verification code sent to ${cleanEmail}. Please check your inbox.`, 'success');
+      } else if (res.status === 503) {
+        // Email delivery failed — show the exact Brevo error to help diagnose
+        const detail = data?.detail || data?.error || 'Email delivery failed.';
+        showShortToast(`Email failed: ${detail}`, 'error');
       } else {
         showShortToast(data?.error || 'No account found with this email address.', 'error');
       }
@@ -250,6 +254,9 @@ export default function AuthScreen({ onAuthenticated }: Props) {
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
         showShortToast(`Code resent to ${cleanEmail}. Please check your inbox.`, 'success');
+      } else if (res.status === 503) {
+        const detail = data?.detail || data?.error || 'Email delivery failed.';
+        showShortToast(`Email failed: ${detail}`, 'error');
       } else {
         showShortToast(data?.error || 'Unable to resend code.', 'error');
       }
